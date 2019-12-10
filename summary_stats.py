@@ -2,12 +2,12 @@
 SCRIPT TO EXPLORE PROPERTIES OF NSQIP DATA
 """
 
-import sys
 import os
 import pandas as pd
 import numpy as np
-import seaborn as sns
-from matplotlib import pyplot as plt
+# import sys
+# import seaborn as sns
+# from matplotlib import pyplot as plt
 
 dir_base = os.getcwd()
 dir_data = os.path.join(dir_base, '..', 'data')
@@ -17,44 +17,7 @@ fn_years = np.sort(os.listdir(dir_raw))
 
 pd.options.display.max_rows = 100
 
-######################################################
-# ------------ (1) CONVERT .dta to .csv ------------ #
 
-# tmp = []
-# for ff in fn_years:
-#     print('Folder: %s' % ff)
-#     fold = os.path.join(dir_raw, ff)
-#     fns = pd.Series(os.listdir(fold))
-#     regex = fns.str.contains('.dta$') & ~fns.str.contains('clean')
-#     if any(regex):
-#         print('converting')
-#         fn = fns[regex].to_list()[0]
-#         df = pd.read_stata(os.path.join(fold, fn))
-#         df.to_csv(os.path.join(fold,fn.replace('dta','csv')))
-
-###############################################
-# ------------ (2) LOAD IN DATA  ------------ #
-
-# ---- Load csv or text ---- #
-holder = []
-for ff in fn_years:
-    print('Folder: %s' % ff)
-    fold = os.path.join(dir_raw, ff)
-    fns = pd.Series(os.listdir(fold))
-    reg1 = fns.str.contains('\\.txt$') & ~fns.str.contains('clean')
-    reg2 = fns.str.contains('\\.csv$') & ~fns.str.contains('clean')
-    if sum(reg1)==1:
-        print('extracting txt')
-        fn = fns[reg1].to_list()[0]
-        df = pd.read_csv(os.path.join(fold, fn), sep='\t')
-    elif sum(reg2)==1:
-        print('extracting csv')
-        fn = fns[reg2].to_list()[0]
-        df = pd.read_csv(os.path.join(fold, fn),encoding='ISO-8859-1')
-    else:
-        print('error!')
-    df.columns = df.columns.str.lower()
-    holder.append(df)
 
 
 
