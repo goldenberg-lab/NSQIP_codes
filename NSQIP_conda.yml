@@ -1,4 +1,4 @@
-name: NSQIP
+name: NSQIP2
 channels:
   - conda-forge
   - defaults
@@ -31,5 +31,4 @@ dependencies:
     - scikit-learn==0.22
     - six==1.13.0
     - sklearn==0.0
-prefix: /home/erik/anaconda3/envs/NSQIP
 
