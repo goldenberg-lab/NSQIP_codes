@@ -1,0 +1,34 @@
+name: NSQIP
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - _libgcc_mutex=0.1
+  - bzip2=1.0.8
+  - ca-certificates=2019.11.28
+  - certifi=2019.11.28
+  - ld_impl_linux-64=2.33.1
+  - libffi=3.2.1
+  - libgcc-ng=9.2.0
+  - libstdcxx-ng=9.2.0
+  - ncurses=6.1
+  - openssl=1.1.1d
+  - pip=19.3.1
+  - python=3.7.3
+  - readline=8.0
+  - setuptools=42.0.2
+  - sqlite=3.30.1
+  - tk=8.6.10
+  - wheel=0.33.6
+  - xz=5.2.4
+  - zlib=1.2.11
+  - pip:
+    - joblib==0.14.1
+    - numpy==1.17.4
+    - pandas==0.25.3
+    - python-dateutil==2.8.1
+    - pytz==2019.3
+    - scikit-learn==0.22
+    - six==1.13.0
+    - sklearn==0.0
+prefix: /home/erik/anaconda3/envs/NSQIP
