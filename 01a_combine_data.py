@@ -11,10 +11,12 @@ import os
 import re
 import pandas as pd
 # the root of the nsqip directory
-main_dir = '/Users/delvin/Documents/OneDrive - SickKids/nsqip/'
+main_dir = os.path.join(os.getcwd(),'..') # '/Users/delvin/Documents/OneDrive - SickKids/nsqip/'
 # assumes data sits in  'nsqip/data/raw/*'
 data_dir = os.path.join(main_dir, 'data')
 raw_data_dir = os.path.join(data_dir, 'raw')
+if not os.path.exists(data_dir):
+    import sys; sys.exit('errrrror!!!')
 
 df_ph = []
 vars_ph = []
@@ -25,7 +27,7 @@ for dirname, dirnames, filenames in os.walk(raw_data_dir, topdown = True):
         if re.search('[0-9]{2}.dta|18.txt$|15_v2.dta', filename): # raw statas and 2018 file
             fn = os.path.join(dirname, filename)                  # input file absolute path
             # print(dirname)
-            # print(filename)
+            print(filename)
             if fn.endswith('dta'):
                 print("Reading in {}".format(fn))
                 df = pd.read_stata(fn)
@@ -33,7 +35,7 @@ for dirname, dirnames, filenames in os.walk(raw_data_dir, topdown = True):
                 # 'ya'
             else:
                 print("Reading in {}".format(fn))
-                df = pd.read_csv(fn)
+                df = pd.read_csv(fn,sep='\t')
                 df.drop(df.columns[[0]], axis = 1, inplace = True) # drop pesky first column (looks like a pd index),
                                                                    # axis = 1 is column and inplace drops without re-assigning
                 print("Done...")

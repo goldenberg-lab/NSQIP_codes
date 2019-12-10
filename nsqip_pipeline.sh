@@ -8,5 +8,5 @@
 conda activate nsqip
 
 echo "----- Step 1: Process raw data files to csv or text -----"
-python raw_nsqip_process.py
+python 01a_combine_data.py #raw_nsqip_process.py
 # Output: 
