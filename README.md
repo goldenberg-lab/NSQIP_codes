@@ -5,7 +5,7 @@ Scripts for the surgincal outcomes projects for NSQIP-P
 Assumes the following folder structure
 
 ```bash
-├── analysis [where the github code lives]
+├── NSQIP_codes [where the github code lives]
 ├── data
 │   ├── output
 │   └── raw
