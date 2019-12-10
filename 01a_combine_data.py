@@ -20,6 +20,17 @@ if not os.path.exists(data_dir):
 
 df_ph = []
 vars_ph = []
+
+di_fix = {'anesthes':'anestech', 'deaddate_unk':'death30dtunk',
+ 'dothsepshock':'dothseshock','nothsepshock':'nothseshock',
+ 'retopor2icd101': 'reopor2icd101',
+ 'retopor2icd91': 'reopor2icd91',
+ 'readsuspreason1': 'readmsuspreason1',
+ 'readsuspreason2': 'readmsuspreason2',
+ 'readsuspreason3': 'readmsuspreason3',
+ 'readsuspreason4': 'readmsuspreason4',
+ 'readsuspreason5': 'readmsuspreason5'}
+
 # ---- read in the data -----
 # traverses directory, read in each relevant file, convert all variable names to lower case and concatenate
 for dirname, dirnames, filenames in os.walk(raw_data_dir, topdown = True):
@@ -40,7 +51,7 @@ for dirname, dirnames, filenames in os.walk(raw_data_dir, topdown = True):
                                                                    # axis = 1 is column and inplace drops without re-assigning
                 print("Done...")
             df.columns = df.columns.str.lower()
-
+            df.rename(columns=di_fix,inplace=True)
             # puf_yr = test[('operyr')].unique().repeat(test.columns.shape[0])  # repeat year for same length as # of variables
             res = re.search(r'[0-9]{4}', fn)                                    # extract current puf year, safer to just get it from the file name
             puf_yr = res.group(0)
