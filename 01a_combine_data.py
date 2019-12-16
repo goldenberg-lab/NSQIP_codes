@@ -46,7 +46,8 @@ for dirname, dirnames, filenames in os.walk(raw_data_dir, topdown = True):
                 # 'ya'
             else:
                 print("Reading in {}".format(fn))
-                df = pd.read_csv(fn,sep='\t')
+                # df = pd.read_csv(fn,sep='\t')
+                df = pd.read_csv(fn)
                 df.drop(df.columns[[0]], axis = 1, inplace = True) # drop pesky first column (looks like a pd index),
                                                                    # axis = 1 is column and inplace drops without re-assigning
                 print("Done...")
@@ -62,10 +63,8 @@ for dirname, dirnames, filenames in os.walk(raw_data_dir, topdown = True):
             df_ph.append(df)
 
 df = pd.concat(df_ph)
-# df.shape # (602584, 399)
+# df.shape # (602584, 388)
 # df.head
-
-
 yr_vars = pd.concat(vars_ph)
 # yr_vars.shape # 2536,2
 # yr_vars
