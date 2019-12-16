@@ -7,6 +7,10 @@
 
 conda activate NSQIP
 
-echo "----- Step 1: Process raw data files to csv or text -----"
-python 01a_combine_data.py #raw_nsqip_process.py
+echo "----- Step 1: Combine raw data from Stata format -----"
+python 01a_combine_data.py 
+# Output: combined_raw.csv and yr_vars.csv
+
+echo "----- Step 2: Process data to produce y and X matrices -----"
+python yX_process.py 
 # Output: 
