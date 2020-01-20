@@ -4,13 +4,14 @@ import pandas as pd
 import os
 import gc
 
-from modelling_funs import stopifnot
+from support import support_funs as sf
 
 # set up directories
 dir_base = os.getcwd()
 dir_output = os.path.join(dir_base,'..','output')
+dir_data = os.path.join(dir_base,'..','data')
 dir_figures = os.path.join(dir_base,'..','figures')
-stopifnot(all([os.path.exists(x) for x in [dir_output,dir_figures]]))
+sf.stopifnot(all([os.path.exists(x) for x in [dir_output,dir_figures]]))
 
 # manual list of columns to drop
 
@@ -94,6 +95,7 @@ print(df_missing_some)
 fig, ax = plt.subplots(figsize=(14,8))
 fig = sns.heatmap(df_missing_some[df_missing_some.vv.isin(vv_dd)].pivot('vv','operyr','mu'),yticklabels=vv_dd,ax=ax)
 fig.figure.savefig(os.path.join(dir_figures,'missing_delta_large.png'))
+plt.close()
 
 # features with consistently low missingness
 tmp = df_agg_missing[~df_agg_missing.vv.isin(vv_dd + vv_complete + vv_missing_100pct)].sort_values('mu').reset_index(drop=True)
@@ -102,12 +104,13 @@ fig = sns.distplot(tmp.mu)
 fig.set_xlabel('missing pct')
 fig.set_title('distribution of missingness by low delta',size=12)
 fig.figure.savefig(os.path.join(dir_figures,'missing_low_delta.png'))
+plt.close()
 
 ##########################################
 ### ---- (3) LABEL CATEGORIZATION ---- ###
 
-# for ii, rr in df_desc[df_desc.vars.isin(vv_low)].iterrows():
-#     print('---------- Variable: %s: ----------\n %s' % (rr['vars'], rr['desc']))
+for ii, rr in df_desc[df_desc.vars.isin(vv_low)].iterrows():
+    print('---------- Variable: %s: ----------\n %s' % (rr['vars'], rr['desc']))
 
 # --------------- CONSISTENTLY LOW MISSINGNESS (<20% for max-year) ------------------ #
 
@@ -158,23 +161,22 @@ cn_X_keep = ['acq_abnormality','cpt','workrvu','inout', 'transt','age_days',
              'anestech','dnr','ventilat','asthma','hxcld','struct_pulm_ab',
              'esovar', 'prvpcs','impcogstat','seizure','cerebral_palsy',
              'neuromuscdis','steroid','wndinf','hemodisorder',
-             'cpr_prior_surg','transfus','casetype','asaclas','surgspec']
-
-# Columns that probably occur after/during surgery?
-cn_X_post = ['oxygen_sup', 'tracheostomy','nutr_support','inotr_support',
-             'cong_malform','htooday']
+             'cpr_prior_surg','transfus','casetype','asaclas','surgspec',
+             'oxygen_sup', 'tracheostomy','nutr_support','inotr_support',
+             'cong_malform','htooday' # intraoperative
+            ]
 
 
 # Make sure the complete variables were properly distributed
-tmp1 = pd.Series(cn_y_num + cn_y_bin + cn_idx + cn_X_keep + cn_X_drop + cn_X_post)
+tmp1 = pd.Series(cn_y_num + cn_y_bin + cn_idx + cn_X_keep + cn_X_drop)
 print(np.setdiff1d(tmp1, vv_complete)); print(np.setdiff1d(vv_complete,tmp1))
-stopifnot(len(vv_complete)==len(tmp1)-1)
+sf.stopifnot(len(vv_complete)==len(tmp1)-1)
 # Make sure the large delta variables were distributed
 tmp2 = pd.Series(cn_X_dd_impute + cn_X_dd_drop + cn_y_impute_bin + cn_y_impute_num)
-stopifnot(np.setdiff1d(tmp2,vv_dd).shape[0]==0)
+sf.stopifnot(np.setdiff1d(tmp2,vv_dd).shape[0]==0)
 # Make sure low_missingness lines up
 tmp3 = pd.Series(cn_X_low_impute + cn_X_low_drop + cn_y_low_num + cn_y_low_bin)
-stopifnot(np.setdiff1d(tmp3,vv_low).shape[0]==0)
+sf.stopifnot(np.setdiff1d(tmp3,vv_low).shape[0]==0)
 
 #########################################
 ### ---- (4) FEATURE ENGINEERING ---- ###
@@ -198,6 +200,7 @@ dat.diabetes = np.where(dat.diabetes.isin(['insulin','non-insulin']),'yes',dat.d
 dat.surgspec = dat.surgspec.str.replace('pediatric\\s|\\s(ent)','')
 dat.surgspec = dat.surgspec.str.replace('general\\ssurgery','surgery')
 dat.anestech = np.where(dat.anestech=='general','general','non-general')
+dat.cong_malform = np.where(dat.cong_malform == 'no','no','yes')
 
 # Column types
 df_dtypes = dat.dtypes.reset_index().rename(columns={0:'tt','index':'cc'}).sort_values('tt').reset_index(drop=True)
@@ -216,12 +219,28 @@ for cc in df_dtypes[(df_dtypes.cc.isin(cn_y)) & (df_dtypes.tt=='object')].cc:
     tmp3 = np.where(tmp.isnull(),-1,np.where(tmp == tmp2.idxmin(), 1, 0))
     dat[cc] = tmp3
 
+# Aggregate the intricular hemorrhage
+cn_ivh = cn[cn.str.contains('civh')]
+dat['civhg'] = np.where(dat[cn_ivh].sum(axis=1)>0,1,0)
+cn_y = list(np.append(np.setdiff1d(cn_y,cn_ivh),'civhg'))
+
+##########################################
+### ---- (5) SEMANTIC CPT HASHING ---- ###
+
+
+# ENCODE CPT ANNOTATIONS #
+cpt_df = pd.read_csv(os.path.join(dir_data,'cpt_anno.csv'))
+sf.stopifnot(len(np.setdiff1d(dat.cpt.unique().astype(int),cpt_df.cpt))==0)
+cpt_txt = list(cpt_df.title.str.strip().str.replace('Under\\s|on\\s|the\\s','').unique())
+
+
+###############################
+### ---- (6) SVAE DATA ---- ###
+
 # Save the X and y matrices for later
 dat[cn_idx + cn_y].to_csv(os.path.join(dir_output,'y_bin.csv'),index=False)
 dat[cn_idx + cn_X].to_csv(os.path.join(dir_output,'X_preop.csv'),index=False)
 
-#####################################################
-### ---- (6) FACTOR INSTABILITY ACROSS YEARS ---- ###
 
 
 

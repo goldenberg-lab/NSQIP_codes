@@ -13,4 +13,7 @@ python 01a_combine_data.py
 
 echo "----- Step 2: Process data to produce y and X matrices -----"
 python yX_process.py 
-# Output: 
+# Output: y_bin.csv and X_preop.csv
+
+echo "----- Step 3: Test X-imputation -----"
+#python X_imputation.py

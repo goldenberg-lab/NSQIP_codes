@@ -4,6 +4,10 @@ import pandas as pd
 import seaborn as sns
 import sys
 
+def stopifnot(stmt):
+    if not stmt:
+        sys.exit('error! Statement is not True')
+
 # X = X_df[cX].copy();
 # tt = tt_X.copy()
 def process_X_dicts(X, tt):
@@ -40,7 +44,6 @@ def sens_spec_fun2(thresh, y, score, method, target):
 
 
 # y=y_mdl; score=p_mdl;method='spec';target=0.98
-
 def thresh_finder(target, y, score, method):
     thresh = sp.optimize.minimize_scalar(fun=sens_spec_fun2, bounds=(0, 1),
                                          method='bounded', args=(y, score, method, target)).x
@@ -48,22 +51,27 @@ def thresh_finder(target, y, score, method):
 
 
 # Fix the sensitivity
-def auc(y, score):
+def auc(y, score, nsamp=10000):
     if not all((y == 0) | (y == 1)):
         print('error, y has non-0/1'); return(None)
     idx1 = np.where(y == 1)[0]
     idx0 = np.where(y == 0)[0]
-    if (len(idx1)==0) | (len(idx0)==0):
-        return(np.NaN)
-    den = len(idx1) * len(idx0)
-    num = 0
-    score0 = score[idx0]
-    for ii in idx1:
-        num += np.sum(score[ii] > score0)
-    return (num / den)
+    if (len(idx1) == 0) | (len(idx0) == 0):
+        return (np.NaN)
+    if len(y) < 1000:
+        den = len(idx1) * len(idx0)
+        num = 0
+        score0 = score[idx0]
+        for ii in idx1:
+            num += np.sum(score[ii] > score0)
+        return (num / den)
+    else:
+        return(np.mean(score[np.random.choice(idx1, nsamp)] > score[np.random.choice(idx0, nsamp)]))
 
 # The columns of score need to match unique(y)
-def pairwise_auc(y,score):
+def pairwise_auc(y,score,average=True):
+    if len(y.shape) > 1:
+        y = y.argmax(axis=1)
     uy = np.unique(y)
     tmp = []
     for i1 in np.arange(0,len(uy)-1):
@@ -74,28 +82,35 @@ def pairwise_auc(y,score):
             yi1 = np.where(yi1 == l1, 1, 0)
             tmp.append(pd.Series({'y1': l1, 'y0': l0, 'auc': auc(y=yi1, score=si1)}))
     df = pd.concat(tmp,axis=1).T
-    return (df)
+    if average:
+        return(df.auc.mean())
+    else:
+        return (df)
 
 
 # Plotting function for AUC
-def plot_auc(lbl,score):
+def plot_auc(lbl,score,num=100,figure=True):
     if not all((lbl == 0) | (lbl == 1)):
         print('error, lbl has non-0/1'); return (None)
     sidx = np.argsort(score)
     lbl, score = lbl[sidx], score[sidx]
     s1 = score[lbl == 1]
-    uscore = np.linspace(start=s1.min()*0.99, stop=s1.max()*1.01, num=1e3)
+    uscore = np.linspace(start=s1.min()*0.99, stop=s1.max()*1.01, num=num)
     tmp = np.ones([uscore.shape[0],2]) * np.NaN
     for ii, tt in enumerate(uscore):
         tpr = sens_spec_fun(thresh=tt,y=lbl,score=score,method='sens')
         fpr = 1 - sens_spec_fun(thresh=tt,y=lbl,score=score,method='spec')
         tmp[ii,:] = [tpr, fpr]
     df = pd.DataFrame(tmp,columns=['tpr','fpr'])
-    auc_tot = auc(y=lbl,score=score)
-    fig = sns.lineplot(x='fpr', y='tpr', data=df)
-    fig.set_ylabel('TPR'); fig.set_xlabel('FPR')
-    fig.text(0.01, 0.98, 'AUC: %0.3f' % auc_tot)
-    return((fig, df))
+    df.insert(0,'thresh',uscore)
+    if figure:
+        auc_tot = auc(y=lbl,score=score)
+        fig = sns.lineplot(x='fpr', y='tpr', data=df)
+        fig.set_ylabel('TPR'); fig.set_xlabel('FPR')
+        fig.text(0.01, 0.98, 'AUC: %0.3f' % auc_tot)
+        return((fig, df))
+    else:
+        return(df)
 
 # Function to calculate positive predictive value ~
 def ppv(thresh, y, score):
@@ -105,19 +120,20 @@ def ppv(thresh, y, score):
     ppv = ntp / (ntp + nfp)
     return (ppv)
 
-def plot_ppv(lbl,score,figure=True):
+def plot_ppv(lbl,score,figure=True,num=int(1e3)):
     if not all((lbl == 0) | (lbl == 1)):
         print('error, lbl has non-0/1'); return (None)
     sidx = np.argsort(score)
     lbl, score = lbl[sidx], score[sidx]
     s1 = score[lbl == 1]
-    uscore = np.linspace(start=s1.min()*0.99, stop=s1.max()*1.01, num=1e3)
+    uscore = np.linspace(start=s1.min()*0.99, stop=s1.max()*0.99, num=num)
     tmp = np.ones([uscore.shape[0],2]) * np.NaN
     for ii, tt in enumerate(uscore):
         tpr = sens_spec_fun(thresh=tt,y=lbl,score=score,method='sens')
         precision = ppv(thresh=tt,y=lbl,score=score)
         tmp[ii,:] = [tpr, precision]
     df = pd.DataFrame(tmp,columns=['tpr','precision'])
+    df.insert(0,'thresh',uscore)
     if figure:
         fig = sns.lineplot(x='tpr', y='precision', data=df)
         fig.set_ylabel('PPV'); fig.set_xlabel('TPR')

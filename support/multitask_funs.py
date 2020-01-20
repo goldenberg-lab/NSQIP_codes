@@ -1,14 +1,21 @@
 import numpy as np
 from scipy.optimize import minimize
+from scipy.optimize import fmin_l_bfgs_b as bfgs
+
+
+def dgp_yX(n,p,ss=1234):
+    X = np.random.randn(n,p)
+    eta = X.dot(np.repeat(1,p))
+    py = sigmoid(eta)
+    y = np.random.binomial(n=1,p=py,size=n)
+    return (y, X)
+
 
 # Support functions
 def sigmoid(x):
     return(1 / (1 + np.exp(-x)))
 def corrfun(x,y):
     return(np.corrcoef(x,y)[0,1])
-def stopifnot(stmt):
-    if not stmt:
-        import sys; sys.exit('error! Statement is not True')
 
 def loss_l2(b,y,X,lam):
     eta = X.dot(b)
@@ -29,7 +36,7 @@ def loss_logit(b,y,X,lam):
     return( nll + reg )
 
 def grad_logit(b,y,X,lam):
-    py = sigmoid(X.dot(b))
+    py = sigmoid(X,dot(b))
     gnll = -X.T.dot(y - py)/X.shape[0]
     greg = lam * np.append(0, b[1:])
     return( gnll + greg )
