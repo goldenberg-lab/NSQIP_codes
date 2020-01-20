@@ -16,4 +16,7 @@ python yX_process.py
 # Output: y_bin.csv and X_preop.csv
 
 echo "----- Step 3: Test X-imputation -----"
-#python X_imputation.py
+python X_imputation.py
+# Output: X_imputed.csv
+
+

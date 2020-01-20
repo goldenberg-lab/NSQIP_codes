@@ -2,6 +2,8 @@
 
 Scripts for the surgincal outcomes projects for NSQIP-P
 
+Run the `nsqip_pipeline.sh` file to replicate results which will be stored in the `output` folder
+
 Assumes the following folder structure
 
 ```bash
