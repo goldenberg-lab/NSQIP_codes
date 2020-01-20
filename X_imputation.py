@@ -205,6 +205,7 @@ df_year_agg = df_year.drop(columns='test_yr').groupby('cn').mean().reset_index()
 # g.map(sns.scatterplot,'test_yr','value')
 
 cn_toimpute = df_year_agg[(df_year_agg.precision > 0.1) & (df_year_agg.recall > 0.2)].cn.to_list()
+cn_todrop = np.setdiff1d(df_year_agg.cn, cn_imputed)
 
 for ii, cc in enumerate(cn_toimpute):
     print('---------- Imputation for column %s (%i of %i) -------------' % (cc, ii + 1, len(cn_toimpute)))
@@ -239,6 +240,8 @@ for ii, cc in enumerate(cn_toimpute):
     print(pd.Series(tmp_y).value_counts(normalize=True))
     X_df.loc[X_df[cc].isnull(),cc] = y_impute
 
-X_df.to_csv(os.path.join(dir_output,'X_imputed.csv'),index=False)
+# Final list of columns
+cn_final = ['caseid','operyr'] + list(np.sort(cn_imputed + cn_toimpute))
+X_df[cn_final].to_csv(os.path.join(dir_output,'X_imputed.csv'),index=False)
 
 
