@@ -229,9 +229,9 @@ cn_y = list(np.append(np.setdiff1d(cn_y,cn_ivh),'civhg'))
 
 
 # ENCODE CPT ANNOTATIONS #
-cpt_df = pd.read_csv(os.path.join(dir_data,'cpt_anno.csv'))
-sf.stopifnot(len(np.setdiff1d(dat.cpt.unique().astype(int),cpt_df.cpt))==0)
-cpt_txt = list(cpt_df.title.str.strip().str.replace('Under\\s|on\\s|the\\s','').unique())
+# cpt_df = pd.read_csv(os.path.join(dir_data,'cpt_anno.csv'))
+# sf.stopifnot(len(np.setdiff1d(dat.cpt.unique().astype(int),cpt_df.cpt))==0)
+# cpt_txt = list(cpt_df.title.str.strip().str.replace('Under\\s|on\\s|the\\s','').unique())
 
 
 ###############################
