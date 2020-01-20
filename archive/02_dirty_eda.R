@@ -4,11 +4,11 @@ library(tidyverse)
 library(naniar)
 
 # setting up directories
-setwd("~/Documents/OneDrive - SickKids/nsqip/")
+setwd("~/Documents/OneDrive - SickKids/nsqip/") # where the root nsqip directory is 
 figure_dir <- 'output/figures/'
 source("analysis/nsqip_helpers.R")
 
-# reading in the data
+# ----- reading in the data ----
 dat_all_raw <- read.csv("data/output/combined_raw.csv", stringsAsFactors = FALSE) %>% as_tibble() # the data 
 yr_vars_all <- read_csv("output/var_names_yrs.csv")                 # variable names
 master_key <- read_csv("output/master_key.csv")                     # master key linking variable names to descriptions
@@ -29,7 +29,7 @@ yr_vars_all %>%
 dev.off()
 
 
-# ---- cleaning ----
+# ---- cleaning (replacing nulls) ----
 
 # replace all nulls, empty space and -99 with NAs
 dat_all <- dat_all_raw %>% 
