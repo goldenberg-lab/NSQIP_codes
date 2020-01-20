@@ -22,9 +22,9 @@ sf.stopifnot(all([os.path.exists(x) for x in [dir_output,dir_figures]]))
 ### ---- (1) LOAD IN AND PROCESS DATA ---- ###
 
 fn_y = 'y_bin.csv'
-fn_X = 'X_partial.csv'
-if fn_X not in os.listdir(dir_output):
-    fn_X = 'X_preop.csv'
+fn_X = 'X_preop.csv'
+#if fn_X not in os.listdir(dir_output):
+#    fn_X = 'X_preop.csv'
 
 y_df = pd.read_csv(os.path.join(dir_output,fn_y))
 X_df = pd.read_csv(os.path.join(dir_output,fn_X))
@@ -92,7 +92,7 @@ cn_complete_cat = dat_X_missing[(dat_X_missing.cc.isin(cn_complete)) & (dat_X_mi
 cn_complete_num = dat_X_missing[(dat_X_missing.cc.isin(cn_complete)) & ~(dat_X_missing.tt == 'object')].cc
 
 score_partial = []
-ii=0;cc=cn_partial[0]
+#ii=0;cc=cn_partial[0]
 for ii, cc in enumerate(cn_partial):
     print('Imputation for column %s (%i of %i)' % (cc, ii + 1, len(cn_partial)))
     tmp_y = X_df[cc].copy()
