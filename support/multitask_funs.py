@@ -1,56 +1,8 @@
 import numpy as np
 from scipy.optimize import minimize
-from scipy.optimize import fmin_l_bfgs_b as bfgs
+from scipy.optimize import root_scalar
 
-
-def dgp_yX(n,p,ss=1234):
-    X = np.random.randn(n,p)
-    eta = X.dot(np.repeat(1,p))
-    py = sigmoid(eta)
-    y = np.random.binomial(n=1,p=py,size=n)
-    return (y, X)
-
-
-# Support functions
-def sigmoid(x):
-    return(1 / (1 + np.exp(-x)))
-def corrfun(x,y):
-    return(np.corrcoef(x,y)[0,1])
-
-def loss_l2(b,y,X,lam):
-    eta = X.dot(b)
-    mse = np.mean((y - eta) ** 2)
-    reg = lam*np.sum(b[1:]**2) / 2
-    return( mse + reg)
-
-def grad_l2(b,y,X,lam):
-    res = y - X.dot(b)
-    gnll = -X.T.dot(res)/X.shape[0]
-    greg = lam * np.append(0, b[1:])
-    return( gnll + greg )
-
-def loss_logit(b,y,X,lam):
-    eta = X.dot(b)
-    nll = -1*np.mean( y*eta - np.log(1+np.exp(eta)) )
-    reg = lam*np.sum(b[1:]**2) / 2
-    return( nll + reg )
-
-def grad_logit(b,y,X,lam):
-    py = sigmoid(X,dot(b))
-    gnll = -X.T.dot(y - py)/X.shape[0]
-    greg = lam * np.append(0, b[1:])
-    return( gnll + greg )
-
-def OLS(y,x,add_intercept=True):
-    if add_intercept:
-        x = np.c_[np.ones([x.shape[0],1]),x]
-    lhs = np.linalg.inv(x.T.dot(x))
-    rhs = x.T.dot(y)
-    bhat = lhs.dot(rhs)
-    res = y - x.dot(bhat)
-    se = np.std(res) * np.sqrt(np.diag(lhs))
-    z = bhat / se
-    return(bhat, se, z)
+from support.support_funs import stopifnot
 
 # x=Z.copy();y=latent[:,0];standardize=True; add_intercept=True;lam=0
 def least_squares(y, x, lam=0, standardize=True, add_intercept=True):
@@ -71,7 +23,6 @@ def least_squares(y, x, lam=0, standardize=True, add_intercept=True):
     b[1:] = b[1:] / sd_x.flatten()
     b[0] = b[0] - sum(b[1:]*mu_x.flatten())
     return(b)
-
 
 # Fast logistic regression fit
 def fast_logit(y,eta, lam):
@@ -104,8 +55,43 @@ class multitask_logistic():
         self.weights = What[1:]
         self.intercept = What[0].reshape([1,What.shape[1]])
         self.p = p
+        self.Bhat = Bhat
 
     def predict(self, Xnew):
         stopifnot(Xnew.shape[1] == self.weights.shape[0])
         eta = Xnew.dot(self.weights) + self.intercept
         return (eta)
+
+def dgp_yX(n,p,ss=1234):
+    X = np.random.randn(n,p)
+    eta = X.dot(np.repeat(1,p))
+    py = sigmoid(eta)
+    y = np.random.binomial(n=1,p=py,size=n)
+    return (y, X)
+
+def sigmoid(x):
+    return(1 / (1 + np.exp(-x)))
+
+def loss_l2(b,y,X,lam):
+    eta = X.dot(b)
+    mse = np.mean((y - eta) ** 2)
+    reg = lam*np.sum(b[1:]**2) / 2
+    return( mse + reg)
+
+def grad_l2(b,y,X,lam):
+    res = y - X.dot(b)
+    gnll = -X.T.dot(res)/X.shape[0]
+    greg = lam * np.append(0, b[1:])
+    return( gnll + greg )
+
+def loss_logit(b,y,X,lam):
+    eta = X.dot(b)
+    nll = -1*np.mean( y*eta - np.log(1+np.exp(eta)) )
+    reg = lam*np.sum(b[1:]**2) / 2
+    return( nll + reg )
+
+def grad_logit(b,y,X,lam):
+    py = sigmoid(X.dot(b))
+    gnll = -X.T.dot(y - py)/X.shape[0]
+    greg = lam * np.append(0, b[1:])
+    return( gnll + greg )
