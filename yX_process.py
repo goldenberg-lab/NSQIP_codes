@@ -23,8 +23,8 @@ dat.reset_index(drop=True,inplace=True)
 #dat.drop(columns=vv_drop,inplace=True)
 gc.collect() # needed!
 
-# load in the dictionary delvin collated
-df_desc = pd.read_csv(os.path.join(dir_output,'master_key.csv')).rename(columns={'variable_label':'desc'})
+# # load in the dictionary delvin collated
+# df_desc = pd.read_csv(os.path.join(dir_output,'master_key.csv')).rename(columns={'variable_label':'desc'})
 
 ###################################################
 ### ---- (1) convert missing values to nas ---- ###
@@ -109,8 +109,8 @@ plt.close()
 ##########################################
 ### ---- (3) LABEL CATEGORIZATION ---- ###
 
-for ii, rr in df_desc[df_desc.vars.isin(vv_low)].iterrows():
-    print('---------- Variable: %s: ----------\n %s' % (rr['vars'], rr['desc']))
+# for ii, rr in df_desc[df_desc.vars.isin(vv_low)].iterrows():
+#     print('---------- Variable: %s: ----------\n %s' % (rr['vars'], rr['desc']))
 
 # --------------- CONSISTENTLY LOW MISSINGNESS (<20% for max-year) ------------------ #
 

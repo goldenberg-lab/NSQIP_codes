@@ -13,7 +13,7 @@ dir_output = os.path.join(dir_base,'..','output')
 dir_data = os.path.join(dir_base,'..','data')
 dir_figures = os.path.join(dir_base,'..','figures')
 
-from support import mdl_funs as mf
+from support import naive_bayes as mf
 from support import support_funs as sf
 import acc_funs as af
 sf.stopifnot(all([os.path.exists(x) for x in [dir_output,dir_figures]]))

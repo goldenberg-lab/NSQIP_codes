@@ -1,12 +1,38 @@
 import numpy as np
 from scipy.stats import norm
 from sklearn.naive_bayes import BernoulliNB, GaussianNB
+from sklearn.linear_model import LogisticRegression
 from statsmodels.stats import multitest
 from support.support_funs import stopifnot
 from support.mdl_funs import normalize, idx_iter
 
+def pred_batch(data, n, splits, mdls, cidx, enc, iter):
+    stopifnot(len(cidx) == len(mdls) == len(enc) == len(iter))
+    pmat = []
+    for ii in range(n):
+        ridx = splits[ii]
+        holder = []
+        for jj, check in enumerate(iter):
+            if check:
+                x_ii = enc[jj].transform(data.iloc[ridx, cidx[jj]])
+                holder.append(mdls[jj].predict_proba(x_ii)[:, 1:])
+        pmat.append(np.hstack(holder))
+    return(np.vstack(pmat))
 
-#self = mbatch_NB();mbatch=10000;data=X_test_ii;lbls=y_train_ii
+def x_batch(data, n, splits, cidx, enc, iter):
+    stopifnot(len(cidx) == len(enc) == len(iter))
+    xmat = []
+    for ii in range(n):
+        ridx = splits[ii]
+        holder = []
+        for jj, check in enumerate(iter):
+            if check:
+                holder.append(enc[jj].transform(data.iloc[ridx, cidx[jj]]))
+        xmat.append(np.hstack(holder))
+    return(np.vstack(xmat))
+
+
+#self = mbatch_NB(method='gaussian');mbatch=100000;data=Xtrain;lbls=ytrain.values
 class mbatch_NB():
     def __init__(self, method='bernoulli'):
         self.method = method.lower()
@@ -23,6 +49,10 @@ class mbatch_NB():
         stopifnot(len(lbls) == self.n)
         self.enc = normalize(copy=False)
         self.enc.fit(data)  # Get the one-hot encoders
+        # Make lists of the indices
+        self.lst_enc = [self.enc.cenc, self.enc.nenc]
+        self.lst_cidx = [self.enc.cidx, self.enc.nidx]
+        self.lst_iter = [len(z) > 0 for z in self.lst_cidx]
         # For each feature we need: sum(x), sum(x**2), sum(x,y)
         self.fun_methods[self.method]['fit'](data,lbls,mbatch)
 
@@ -30,9 +60,13 @@ class mbatch_NB():
         self.ulbls = np.unique(lbls)
         lidx = [np.where(lbls == kk)[0] for kk in self.ulbls]
         midx = [z.min() for z in lidx]
-        self.mdl_cat, self.mdl_num = BernoulliNB(), GaussianNB()
-        self.mdl_cat.fit(X=self.enc.cenc.transform(data.iloc[midx, self.enc.cidx]),y=lbls[midx])
-        self.mdl_num.fit(X=self.enc.nenc.transform(data.iloc[midx, self.enc.nidx]), y=lbls[midx])
+        # Add model list for stacking
+        self.lst_mdls = [BernoulliNB(), GaussianNB()]
+        # If there is not cidx/nidx, it will skipp
+        for jj, check in enumerate(self.lst_iter):
+            if check:
+                self.lst_mdls[jj].fit(X=self.lst_enc[jj].transform(data.iloc[midx, self.lst_cidx[jj]]),y=lbls[midx])
+
         idx_splits = idx_iter(self.n , mbatch)
         niter = len(idx_splits)
         # fit Naive Bayes
@@ -40,20 +74,14 @@ class mbatch_NB():
             if (ii + 1) % np.ceil(niter / 10).astype(int) == 0:
                 print('----- Training NB: batch %i of %i -----' % (ii + 1, niter))
             ridx = np.setdiff1d(idx_splits[ii], midx) # no double counting for midx
-            x_ii_cat = self.enc.cenc.transform(data.iloc[ridx, self.enc.cidx])
-            x_ii_num = self.enc.nenc.transform(data.iloc[ridx, self.enc.nidx])
             y_ii = lbls[ridx]
-            self.mdl_cat.partial_fit(x_ii_cat, y_ii, self.ulbls)
-            self.mdl_num.partial_fit(x_ii_num, y_ii, self.ulbls)
-        # stack naive bayes
-        phat = np.zeros([self.n, 2*(len(self.ulbls)-1)])
-        for ii in range(niter):
-            ridx = idx_splits[ii]
-            x_ii_cat = self.enc.cenc.transform(data.iloc[ridx, self.enc.cidx])
-            x_ii_num = self.enc.nenc.transform(data.iloc[ridx, self.enc.nidx])
-            phat[ridx,:] = np.c_[self.mdl_cat.predict_proba(x_ii_cat)[:,1:],
-                                self.mdl_num.predict_proba(x_ii_num)[:,1:]]
-        # Stack with logistic
+            for jj, check in enumerate(self.lst_iter):
+                if check:
+                    x_ii = self.lst_enc[jj].transform(data.iloc[ridx, self.lst_cidx[jj]])
+                    self.lst_mdls[jj].partial_fit(x_ii, y_ii, self.ulbls)
+
+        print('----- Learning stacker -----')
+        phat = pred_batch(data,niter,idx_splits,self.lst_mdls,self.lst_cidx,self.lst_enc,self.lst_iter)
         self.stacker = LogisticRegression(penalty='none',fit_intercept=True,solver='lbfgs')
         self.stacker.fit(phat, lbls)
 
@@ -110,7 +138,7 @@ class mbatch_NB():
         self.Bhat[3, :] = np.where(pvals < 0.1, self.Bhat[3, :], 0)
         print('%i of %i features remain' % (sum(self.Bhat[3, :] > 0), self.enc.p2))
 
-    def predict(self, data):
+    def predict(self, data, mbatch=None):
         stopifnot( data.shape[1] == self.p )
         # Check categoreis line up for predict
         new_vals = [list(np.setdiff1d(data.iloc[:, jj].unique(),uvals)) for
@@ -123,16 +151,20 @@ class mbatch_NB():
                 cjj = self.enc.cidx[jj] # column in reference
                 data.iloc[:, cjj] = np.where(data.iloc[:,cjj].isin(new_vals[jj]),
                             self.enc.cenc.categories_[jj][0],data.iloc[:, cjj])
-        x_pred = np.c_[self.enc.cenc.transform(data.iloc[:, self.enc.cidx]),
-                       self.enc.nenc.transform(data.iloc[:, self.enc.nidx])]
-        return(self.fun_methods[self.method]['predict'](x_pred))
+        # Processing information
+        n_pred = data.shape[0]
+        if mbatch is None:
+            mbatch = n_pred
+        idx_splits = idx_iter(n_pred, mbatch)
+        niter = len(idx_splits)
+        return(self.fun_methods[self.method]['predict'](data,niter,idx_splits))
 
-    def predict_bernoulli(self,x_pred):
-        x_stack = np.c_[self.mdl_cat.predict_proba(x_pred[:, :-len(self.enc.nidx)])[:, 1:],
-                        self.mdl_num.predict_proba(x_pred[:, -len(self.enc.nidx):])[:, 1:]]
-        return(self.stacker.predict_proba(x_stack))
+    def predict_bernoulli(self,data,niter,splits):
+        pmat = pred_batch(data, niter, splits, self.lst_mdls, self.lst_cidx, self.lst_enc, self.lst_iter)
+        return(self.stacker.predict_proba(pmat))
 
-    def predict_gaussian(self,x_pred):
+    def predict_gaussian(self,data,niter,splits):
+        x_pred = x_batch(data,niter,splits,self.lst_cidx, self.lst_enc, self.lst_iter)
         b0 = np.average(a=self.Bhat[0, :], weights=self.Bhat[3, :])
         # Weight by r-squared, statistical significance, and whether the value is zero
         eta = np.average(a=x_pred * self.Bhat[[1], :] + b0, axis=1, weights=self.Bhat[3, :]*~(x_pred==0))
