@@ -4,7 +4,6 @@ import pandas as pd
 import os
 import gc
 
-
 from support import support_funs as sf
 
 # set up directories
@@ -24,7 +23,6 @@ dat.reset_index(drop=True,inplace=True)
 #dat.drop(columns=vv_drop,inplace=True)
 gc.collect() # needed!
 
-<<<<<<< HEAD
 # # load in the dictionary delvin collated
 # df_desc = pd.read_csv(os.path.join(dir_output,'master_key.csv')).rename(columns={'variable_label':'desc'})
 
