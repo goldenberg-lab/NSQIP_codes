@@ -11,7 +11,7 @@ import os
 import re
 import pandas as pd
 # the root of the nsqip directory
-main_dir = os.path.join(os.getcwd(),'..') # '/Users/delvin/Documents/OneDrive - SickKids/nsqip/'
+#main_dir = os.path.dirname(os.getcwd()) # '/Users/delvin/Documents/OneDrive - SickKids/nsqip/'
 # assumes data sits in  'nsqip/data/raw/*'
 data_dir = os.path.join(main_dir, 'data')
 raw_data_dir = os.path.join(data_dir, 'raw')
@@ -82,7 +82,8 @@ del(vars_ph)
 outdir = os.path.join(main_dir, 'output')           # output directory
 out_dat = os.path.join(outdir, 'combined_raw.csv')  # the combined, uncleaned data
 out_vars = os.path.join(outdir, 'yr_vars.csv')      # year by variable vars
-
+if not os.path.exists(outdir):
+	os.makedirs(outdir)
 if not os.path.exists(out_dat):
     print('{} does not exist yet... saving..'.format(out_dat))
     df.to_csv(out_dat, index = False)
