@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import os
 import gc
-from modelling_funs import stopifnot
+from support.support_funs import stopifnot
 
 import seaborn as sns
 from matplotlib import pyplot as plt
@@ -15,7 +15,7 @@ dir_figures = os.path.join(dir_base,'..','figures')
 stopifnot(all([os.path.exists(x) for x in [dir_output,dir_figures]]))
 
 # Load in the accuracy functions
-from acc_funs import auc, plot_ppv
+from support.acc_funs import auc, plot_ppv
 
 ##############################################
 ### ---- (1) load in and process data ---- ###

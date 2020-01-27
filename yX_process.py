@@ -53,6 +53,10 @@ for ii, cidx in enumerate(cidx_str):
     tmp = np.where(tmp.str.contains('null'),np.nan,tmp)
     dat.loc[:, cc] = tmp
 
+# In 2018, missing values for readmission1/reoperation should be 0 not -1
+dat.loc[dat.operyr == 2018,'readmission1'] = np.where(dat.loc[dat.operyr == 2018,'readmission1'].isnull(), 'no', 'yes')
+dat.loc[dat.operyr == 2018,'reoperation'] = np.where(dat.loc[dat.operyr == 2018,'reoperation'].isnull(), 'no', 'yes')
+
 ########################################
 ### ---- (2) summary statistics ---- ###
 
@@ -121,7 +125,7 @@ cn_X_low_drop = ['ivh_grade', 'wndclas', 'anesurg', 'surgane', 'anetime','hdisdt
 
 cn_y_low_num = ['dpatrm','optime','doptodis']
 
-cn_y_low_bin = ['death30yn']
+cn_y_low_bin = ['death30yn','readmission1']
 
 # --------------- LOW + HIGH SOME YEARS ------------------ #
 # --- LOW + HIGH MISSINGNESS --- #
@@ -136,7 +140,7 @@ cn_X_dd_drop = ['coma','tumorcns','bone_marrow_trans','organ_trans',
                 'lapthor_mis','podiag10','podiagtx10','lap_disease','ostomy','pufyear']
 
 cn_y_impute_bin = ['pulembol', 'othgrafl','sdehis','othseshock','othcdiff',
-                   'reoperation','readmission1','nutrition_at_discharge','oxygen_at_discharge']
+                   'nutrition_at_discharge','oxygen_at_discharge']
 
 cn_y_impute_num = ['npulembol', 'nothgrafl', 'nsdehis','nothseshock','nothcdiff']
 
@@ -148,7 +152,7 @@ cn_y_num = ['nsupinfec', 'nwndinfd', 'norgspcssi', 'ndehis', 'noupneumo', 'nrein
             'nivhunk', 'ncdarrest', 'nothbleed', 'nothvt', 'nothsysep', 'nothclab']
 cn_y_bin = ['supinfec', 'wndinfd', 'orgspcssi', 'dehis', 'oupneumo', 'reintub', 'renainsf', 'oprenafl',
             'urninfec', 'cnscoma', 'cnscva', 'cszre', 'neurodef', 'civhg1', 'civhg2', 'civhg3', 'civhg4',
-            'civhunk', 'cdarrest', 'othbleed', 'othvt', 'othsysep', 'othclab']
+            'civhunk', 'cdarrest', 'othbleed', 'othvt', 'othsysep', 'othclab', 'reoperation']
 
 # columns for indexing
 cn_idx = ['caseid','operyr']

@@ -15,7 +15,7 @@ dir_figures = os.path.join(dir_base,'..','figures')
 
 from support import naive_bayes as mf
 from support import support_funs as sf
-import acc_funs as af
+import support.acc_funs as af
 sf.stopifnot(all([os.path.exists(x) for x in [dir_output,dir_figures]]))
 
 ##############################################
