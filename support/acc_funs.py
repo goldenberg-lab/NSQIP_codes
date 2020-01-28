@@ -49,24 +49,74 @@ def thresh_finder(target, y, score, method):
                                          method='bounded', args=(y, score, method, target)).x
     return (thresh)
 
-
-# Fix the sensitivity
-def auc(y, score, nsamp=10000):
+# General AUC function
+def auc(y, score, rand=False, nsamp=10000, both=False):
     if not all((y == 0) | (y == 1)):
         print('error, y has non-0/1'); return(None)
     idx1 = np.where(y == 1)[0]
     idx0 = np.where(y == 0)[0]
+    den = len(idx1) * len(idx0)
     if (len(idx1) == 0) | (len(idx0) == 0):
-        return (np.NaN)
-    if len(y) < 1000:
-        den = len(idx1) * len(idx0)
+        if both:
+            return(np.nan, 0)
+        else:
+            return (np.nan)
+    if not rand:
         num = 0
         score0 = score[idx0]
         for ii in idx1:
             num += np.sum(score[ii] > score0)
-        return (num / den)
+        ratio = num / den
+        if both:
+            return(ratio, den)
+        else:
+            return (ratio)
     else:
-        return(np.mean(score[np.random.choice(idx1, nsamp)] > score[np.random.choice(idx0, nsamp)]))
+        auc_rand = np.mean(score[np.random.choice(idx1, nsamp)] > score[np.random.choice(idx0, nsamp)])
+        if both:
+            return(auc_rand, den)
+        else:
+            return(auc_rand)
+
+# Decomposition function
+# y = np.array([0,1,0,1,1,1])
+# score = np.array([0,1,1.5,3,2,10])
+# group = np.array(['a','a','b','b','b','c'])
+#print(pd.DataFrame({'y':y,'score':score,'group':group}))
+#y=x.y.values;score=x.phat.values;group=x.cpt.values
+def auc_decomp(y,score,group):
+    stopifnot(len(y)==len(score)==len(group))
+    auc_tot, n_tot = auc(y,score, both=True) # will also check for errors
+
+    ugroup = np.unique(group)
+    ugroup1 = ugroup[np.where([sum(y[group==gg]==1)>=1 for gg in ugroup])[0]]
+    #group0 = ugroup[np.where([sum(y[group == gg] == 0) >= 1 for gg in ugroup])[0]]
+    gwise_auc = [auc(y[group==gg],score[group == gg],both=True) for gg in ugroup]
+    df_gwise = pd.DataFrame(np.array(gwise_auc),columns=['auc','den'])
+    df_gwise.den = df_gwise.den.astype(int)
+    df_gwise.insert(0,'group',ugroup)
+    n_within = df_gwise.den.sum()
+    n_between = n_tot - n_within
+    stopifnot(n_between>=0)
+    df_gwise = df_gwise.assign(num=lambda x: (x.den * x.auc)) #.astype(int)
+    auc_within = df_gwise.num.sum() / n_within
+    holder = []
+    for gg in ugroup1:
+        idx_ingroup = (group == gg) & (y==1)
+        idx_outgroup = ~(group == gg) & (y == 0)
+        holder.append(auc(np.append(y[idx_ingroup],y[idx_outgroup]),
+                np.append(score[idx_ingroup], score[idx_outgroup]),both=True))
+    df_between = pd.DataFrame(np.array(holder),columns=['auc','den'])
+    #df_between.den = df_between.den.astype(int)
+    stopifnot(df_between.den.sum() == n_between)
+    df_between = df_between.assign(num=lambda x: (x.den * x.auc)) #.astype(int)
+    auc_between = df_between.num.sum() / n_between
+    auc_weighted = (auc_between * n_between / n_tot) + (auc_within * n_within / n_tot)
+    stopifnot(np.round(auc_tot - auc_weighted,5)==0) # Ensure high precision
+    df_ret = pd.DataFrame({'tt':['tot','within','between'],
+                 'auc':[auc_tot, auc_within, auc_between],
+                  'den':[n_tot, n_within, n_between]})
+    return(df_ret)
 
 # The columns of score need to match unique(y)
 def pairwise_auc(y,score,average=True):
