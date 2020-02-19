@@ -15,7 +15,7 @@ dir_output = os.path.join(dir_base,'..','output')
 dir_figures = os.path.join(dir_base,'..','figures')
 
 fn_X = 'X_imputed.csv'
-fn_Y = 'y_bin.csv'
+fn_Y = 'y_agg.csv'
 dat_X = pd.read_csv(os.path.join(dir_output,fn_X))
 dat_Y = pd.read_csv(os.path.join(dir_output,fn_Y))
 print(dat_X.shape); print(dat_Y.shape)
@@ -24,24 +24,6 @@ u_years = dat_X.operyr.unique()
 # !! ENCODE CPT AS CATEGORICAL !! #
 dat_X['cpt'] = 'c'+dat_X.cpt.astype(str)
 cn_X = list(dat_X.columns[2:])
-
-cn_Y = list(dat_Y.columns[2:])
-missing_Y = dat_Y.melt('operyr',cn_Y)
-missing_Y['value'] = (missing_Y.value==-1)
-missing_Y = missing_Y.groupby(list(missing_Y.columns)).size().reset_index()
-missing_Y = missing_Y.pivot_table(values=0,index=['operyr','variable'],columns='value').reset_index().fillna(0)
-missing_Y.columns = ['operyr','cn','complete','missing']
-missing_Y[['complete','missing']] = missing_Y[['complete','missing']].astype(int)
-missing_Y['prop'] = missing_Y.missing / missing_Y[['complete','missing']].sum(axis=1)
-print(missing_Y[missing_Y.prop > 0].sort_values(['cn','operyr']).reset_index(drop=True))
-tmp = missing_Y[missing_Y.prop > 0].cn.value_counts().reset_index()
-tmp_drop = tmp[tmp.cn > 2]['index'].to_list()
-# Remove outcomes missing is two or more years
-dat_Y.drop(columns=tmp_drop,inplace=True)
-# Remove any Y's that have less than 100 events in 6 yeras
-tmp = dat_Y.iloc[:,2:].apply(lambda x: x[~(x==-1)].sum() ,axis=0).reset_index().rename(columns={0:'n'})
-tmp_drop = tmp[tmp.n < 100]['index'].to_list()
-dat_Y.drop(columns=tmp_drop,inplace=True)
 cn_Y = list(dat_Y.columns[2:])
 
 ###############################################
