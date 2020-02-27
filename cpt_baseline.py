@@ -30,13 +30,15 @@ cn_Y = list(dat_Y.columns[2:])
 # ---- STEP 2: LEAVE-ONE-YEAR - CPT ONLY ---- #
 
 holder_vv = []
+holder_phat = []
 for ii, vv in enumerate(cn_Y):
     print('##### ------- Outcome %s (%i of %i) -------- #####' % (vv, ii+1, len(cn_Y)))
     tmp_ii = pd.concat([dat_Y.operyr, dat_Y[vv]==-1],axis=1)
     tmp_ii = tmp_ii.groupby('operyr')[vv].apply(np.sum).reset_index().rename(columns={vv:'n'})
     tmp_years = tmp_ii[tmp_ii.n == 0].operyr.values
     tmp_train_years = tmp_years[tmp_years > tmp_years.min()]
-    holder_auc = []
+    holder_metrics = []
+    holder_score = []
     for yy in tmp_train_years:
         print('Year %i' % (yy))
         idx_train = dat_X.operyr.isin(tmp_years) & (dat_X.operyr < yy)
@@ -49,12 +51,18 @@ for ii, vv in enumerate(cn_Y):
         mdl_bernoulli = mbatch_NB(method='bernoulli')
         mdl_bernoulli.fit(Xtrain,ytrain.values,mbatch=100000)
         phat_bernoulli = mdl_bernoulli.predict(Xtest)[:,1]
-        holder_auc.append(metrics.roc_auc_score(ytest.values, phat_bernoulli))
-    df_ii = pd.DataFrame({'outcome':vv,'operyr':tmp_train_years, 'auc':holder_auc})
-    holder_vv.append(df_ii)
+        holder_score.append(pd.DataFrame({'y':ytest.values,'phat':phat_bernoulli,'operyr':yy}))
+        holder_metrics.append(pd.DataFrame({'auc':metrics.roc_auc_score(ytest.values, phat_bernoulli),
+            'pr':metrics.average_precision_score(ytest.values, phat_bernoulli)},index=[0]))
+    holder_vv.append(pd.concat(holder_metrics).assign(outcome=vv,operyr=tmp_train_years))
+    holder_phat.append(pd.concat(holder_score).assign(outcome=vv))
 
 res_cpt = pd.concat(holder_vv).reset_index(drop=True)
 res_cpt.insert(0,'tt','cpt')
+
+res_phat = pd.concat(holder_phat).reset_index(drop=True)
+res_phat.to_csv(os.path.join(dir_output,'nbayes_phat.csv'),index=False)
+
 
 ####################################################
 # ---- STEP 3: LEAVE-ONE-YEAR - ALL VARIABLES ---- #

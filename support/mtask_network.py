@@ -25,7 +25,7 @@ from support.mdl_funs import idx_iter
 def sigmoid(x):
     return (1/(1+np.exp(-x)))
 
-# self = mtask_nn()
+# self = mdl #mtask_nn()
 # data=Xtrain;lbls=Ytrain;nepochs=10;mbatch=1000;val_prop=0.1;lr=0.001;ii=0;jj=0
 class mtask_nn(nn.Module):
     def __init__(self):
@@ -53,9 +53,15 @@ class mtask_nn(nn.Module):
     def transform(self,data,check=True):
         return( torch.Tensor(self.enc.transform(data, check=check)) )
 
-    def predict(self,data,check=True):
-        with torch.no_grad():
-            return( self.eval()(self.transform(data,check)).numpy() )
+    def predict(self,data,check=True,mbatch=None):
+        if mbatch is None:
+            mbatch = data.shape[0]
+        phat = np.zeros([data.shape[0],self.n_output])
+        liter = idx_iter(n=data.shape[0],mbatch=mbatch)
+        for idx in liter:
+            with torch.no_grad():
+                phat[idx] = self.eval()(self.transform(data.iloc[idx], check)).numpy()
+        return(phat)
 
     def fit(self, data, lbls, nepochs=100, mbatch=1000, val_prop=0.1, lr=0.001):
         n = data.shape[0]
@@ -69,9 +75,11 @@ class mtask_nn(nn.Module):
             idx_train, idx_val = train_test_split(np.arange(n), test_size=val_prop, random_state=rr)
             check = not all(lbls.iloc[idx_val].apply(lambda x: x[~(x==-1)].sum(),axis=0) > 0)
         n_train, n_val = len(idx_train), len(idx_val)
+        self.idx_train = idx_train
+        self.idx_val = idx_val
         # Find encodings/normalization
         self.enc = normalize(copy=False)
-        self.enc.fit(data.loc[idx_train])
+        self.enc.fit(data.iloc[idx_train])
         Yval = lbls.iloc[idx_val].values # Pre-compute for faster eval
         nY_val= np.apply_along_axis(func1d=lambda x: x[~(x==-1)].sum(),axis=0,arr=Yval)
         nY_train = lbls.iloc[idx_train].apply(lambda x: x[~(x == -1)].sum(),0).values
@@ -142,7 +150,7 @@ class mtask_nn(nn.Module):
                         print(val_score)
                 else:
                     self.res = res_ii
-                self.res
+
         tend = time.time()
 
 # qq = pd.DataFrame({'y':act_cc.astype(str),'p':pred_cc})
