@@ -2,9 +2,11 @@ import sys
 import numpy as np
 import pandas as pd
 
-def stopifnot(stmt):
-    if not stmt:
-        sys.exit('error! Statement is not True')
+def stopifnot(check,stmt=None):
+    if stmt is None:
+        stmt = 'error! Statement is not True'
+    if not check:
+        sys.exit(stmt)
 
 
 #fun = metrics.r2_score; data = [tmp_y_test ,yhat_test]; nbs=999

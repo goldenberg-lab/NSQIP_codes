@@ -1,8 +1,11 @@
 import numpy as np
 import scipy as sp
 import pandas as pd
-import seaborn as sns
 import sys
+
+import matplotlib
+matplotlib.use('Agg')
+import seaborn as sns
 
 def stopifnot(stmt):
     if not stmt:
@@ -66,6 +69,7 @@ def auc(y, score, rand=False, nsamp=10000, both=False):
         score0 = score[idx0]
         for ii in idx1:
             num += np.sum(score[ii] > score0)
+            num += np.sum(score[ii] == score0)/2
         ratio = num / den
         if both:
             return(ratio, den)
@@ -77,6 +81,24 @@ def auc(y, score, rand=False, nsamp=10000, both=False):
             return(auc_rand, den)
         else:
             return(auc_rand)
+
+def auc_ordinal(y,score):
+  score = score[~np.isnan(y)]
+  y = y[~np.isnan(y)]
+  uy = np.sort(np.unique(y))
+  tmp = []
+  for yy in uy:
+      tmp.append(score[y == yy])
+  num, den = 0, 0
+  for ii in np.arange(1,len(uy)):
+      score_other = np.concatenate(tmp[:ii])
+      score_ii = tmp[ii]
+      score_broad = score_ii.repeat(len(score_other)).reshape(len(score_ii),len(score_other)).T
+      num += np.sum(score_broad > score_other.reshape([len(score_other), 1]))
+      num += np.sum(score_broad == score_other.reshape([len(score_other), 1]))/2
+      den += np.cumprod(list(score_broad.shape))[1]
+  return(num / den)
+
 
 # Decomposition function
 # y = np.array([0,1,0,1,1,1])
@@ -113,7 +135,7 @@ def auc_decomp(y,score,group):
     auc_between = df_between.num.sum() / n_between
     auc_weighted = (auc_between * n_between / n_tot) + (auc_within * n_within / n_tot)
     stopifnot(np.round(auc_tot - auc_weighted,5)==0) # Ensure high precision
-    df_ret = pd.DataFrame({'tt':['tot','within','between'],
+    df_ret = pd.DataFrame({'tt':['total','within','between'],
                  'auc':[auc_tot, auc_within, auc_between],
                   'den':[n_tot, n_within, n_between]})
     return(df_ret)
