@@ -19,7 +19,7 @@ from matplotlib import pyplot as plt
 dir_base = os.getcwd()
 dir_output = os.path.join(dir_base,'..','output')
 dir_figures = os.path.join(dir_base,'..','figures')
-dir_weights = os.path.join(dir_base,'..','weights')
+dir_weights = os.path.join(dir_output,'weights')
 for pp in [dir_figures, dir_weights]:
     if not os.path.exists(pp):
         print('making directory %s' % pp); os.mkdir(pp)
@@ -42,6 +42,10 @@ df_cpt = pd.read_csv(os.path.join(dir_output,'X_imputed.csv'),usecols=['operyr',
 df_cpt['idx'] = df_cpt.groupby('operyr').cumcount()
 dat_nnet['idx'] = dat_nnet.groupby(['operyr','lbl']).cumcount()
 dat_nnet = dat_nnet.merge(df_cpt,how='left',on=['idx','operyr'])
+
+# from support.linreg_wAUC import stochastc_wb_auc
+# dat_nnet = dat_nnet[dat_nnet.lbl.isin(['agg_adv1','agg_nsi4'])].reset_index(None,True)
+# dat_nnet = dat_nnet[(dat_nnet.operyr == 2014) & (dat_nnet.lbl == 'agg_nsi4')]
 
 # (3) Load in Delvin's results
 auc_delvin = pd.read_csv(os.path.join(dir_output, 'auc_clean.csv'))

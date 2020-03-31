@@ -12,6 +12,45 @@ def sigmoid(x):
 def idx_I0I1(y):
   return( (np.where(y == 0)[0], np.where(y == 1)[0] ) )
 
+# # Function to return valid between pairs for within vs total
+# y=dat_nnet.y.values; score=dat_nnet.phat.values; group=dat_nnet.cpt.values
+# npair=10000; ss=1234
+# y=np.array([0,1,1, 0,0,1]);score=np.array([2,2,2,1,1,1]);group=np.array([1,1,1,2,2,2])
+def stochastc_wb_auc(y, score, group, npair=10000, ss=1234):
+    # Find the group breakdowns
+    tab = pd.crosstab(index=group, columns=y)
+    ugroup10 = list(tab[tab.apply(lambda x: all(x > 0), 1)].index)
+    tab = tab.reset_index().rename(columns={'row_0':'group',0:'n0',1:'n1'})
+    tab = tab.assign(npair_w = lambda x: x.n0*x.n1)
+    n_w = sum(tab.npair_w)
+    n_t = sum(tab.n0) * sum(tab.n1)
+    n_b = n_t - n_w
+    # All indices
+    np.random.seed(ss)
+    # Within indices
+    qq01 = pd.DataFrame({'y': y, 'group': group}).sort_values('group')
+    qq01 = qq01[qq01.group.isin(ugroup10)]
+    qq01 = qq01.groupby(['group', 'y']).apply(lambda
+            x: np.random.choice(a=x.index,size=npair,replace=True)).reset_index()
+    qq01 = qq01.pivot('group','y',0).reset_index()
+    idx_w = np.vstack(qq01.groupby('group').apply(lambda x: np.c_[x[0][0], x[1][0]]).values)
+    qq01 = pd.DataFrame({'group':group[idx_w[:,0]],
+             's1':score[idx_w[:,1]],'s0':score[idx_w[:,0]]})
+    qq01 = qq01.groupby('group').apply(lambda x: np.mean(x.s1 > x.s0) + 0.5*np.mean(x.s1==x.s0))
+    qq01 = qq01.reset_index().rename(columns={0: 'auc'}).merge(tab.drop(columns=['n0','n1']))
+    auc_w = sum(qq01.auc * qq01.npair_w) / n_w
+    # Total AUC
+    idx0, idx1 = idx_I0I1(y)
+    idx_t = np.c_[np.random.choice(a=idx0,size=idx_w.shape[0],replace=True),
+                  np.random.choice(a=idx1, size=idx_w.shape[0], replace=True)]
+    s0, s1 = score[idx_t[:,0]], score[idx_t[:,1]]
+    auc_t = np.mean(s1 > s0) + 0.5*np.mean(s1 == s0)
+    auc_b = (n_t/n_b)*auc_t - (n_w/n_b)*auc_w
+    # print('AUC within: %0.1f, between: %0.1f, total: %0.1f' %
+    #       (auc_w*100,auc_b*100,auc_t*100))
+    vec_auc = pd.Series({'total':auc_t, 'between':auc_b, 'within':auc_w})
+    return vec_auc, qq01
+
 # y=ytest.copy();group=cpt_test.copy()
 def idx_wb(y,group):
     tab = pd.crosstab(index=group,columns=y)
@@ -27,7 +66,7 @@ def idx_wb(y,group):
     di_idx_b1 = dict(zip(ugroup1, [np.where((group == gg) & (y == 1) )[0] for gg in ugroup1]))
     di_idx_b0 = dict(zip(ugroup0, [np.where((group == gg) & (y == 0))[0] for gg in ugroup0]))
     di_idx_b = {'idx1':di_idx_b1, 'idx0':di_idx_b0}
-    return((di_idx_w, di_idx_b))
+    return di_idx_w, di_idx_b
 
 # Calculate non-convex version
 # w=x0.copy();X=xx.copy();di_idx=idx_all.copy();eta=None
@@ -61,7 +100,7 @@ def AUC_eta(eta1, eta0,den2=int(1e4)):
             num += sum( e1 == eta0 ) / 2
     else:
         #print('stochastic')
-        np.random.seed(den)
+        np.random.seed(den2)
         eta1b, eta0b = np.random.choice(eta1, den2),\
                        np.random.choice(eta0,den2)
         num = sum(eta1b > eta0b) + 0.5*sum(eta1b == eta0b)
@@ -77,7 +116,7 @@ def cAUC_eta(eta1, eta0, den2=int(1e4)):
             num += sum( np.log(sigmoid(e1 - eta0)) )
     else:
         #print('stochastic')
-        np.random.seed(den)
+        np.random.seed(den2)
         eta1b, eta0b = np.random.choice(eta1, den2),\
                        np.random.choice(eta0,den2)
         num = sum(np.log(sigmoid(eta1b - eta0b)))
@@ -96,7 +135,7 @@ def dcAUC_eta(idx1, idx0, eta, X, den2=int(1e4)):
                     (X[[ii]] - X0)).sum(axis=0)
     else:
         #print('stochastic')
-        np.random.seed(den)
+        np.random.seed(den2)
         idx1b, idx0b = np.random.choice(idx1, den2), \
                        np.random.choice(idx0, den2)
         grad += ((1 - sigmoid(eta[idx1b] - eta[idx0b])).reshape([den2,1]) *
@@ -148,7 +187,7 @@ def dcAUC(w, X, di_idx, offset, lam=0, den2=int(1e4)):
     return grad
 
 # self=linreg_wAUC();data=Xtrain.copy();lbls=ytrain.copy();fctr=cpt_train.copy()
-# val=0.3;ss=1; tt=None; lam_seq=None;nlam=10
+# val=0.3;ss=1; tt=None; lam_seq=None;nlam=3
 class linreg_wAUC():
     def __init__(self,standardize=True):
         self.standarize = standardize
@@ -186,7 +225,7 @@ class linreg_wAUC():
         return auc
 
     def fit(self,data,lbls,fctr,tt=None, nlam=50, den2=int(1e5),
-                    lam_seq=None,val=None,ss=1234):
+                    lam_seq=None,val=None,x0=None,ss=1234):
         if not isinstance(data,pd.DataFrame):
             data = pd.DataFrame(data)
         if not isinstance(fctr,pd.Series):
@@ -219,13 +258,14 @@ class linreg_wAUC():
             if tt is None:
                 tt = ['total', 'within', 'between']
             self.tune(data, lbls, fctr, tt=tt, val=val, nlam=nlam, lam_seq=lam_seq,
-                      den2=den2, data_val=data_val, lbls_val=lbls_val, fctr_val=fctr_val)
+                      den2=den2, data_val=data_val, lbls_val=lbls_val,
+                      fctr_val=fctr_val, x0=x0)
         else:
             self.tune(data, lbls, fctr, tt=tt, val=val, den2=den2,
-                      nlam=nlam, lam_seq=lam_seq)
+                      nlam=nlam, lam_seq=lam_seq, x0=x0)
 
-    # nlam=50; lam_seq=None; tt=['total','within','between']
-    def tune(self, data, lbls, fctr, tt, den2, val=None,
+    # nlam=5;x0=None;den2=int(1e5) lam_seq=None; tt=['total','within','between']
+    def tune(self, data, lbls, fctr, tt, den2, x0, val,
              nlam=50, lam_seq=None, data_val=None, lbls_val=None, fctr_val=None):
         if lam_seq is None:
             self.lam_seq = np.flip(np.exp(np.linspace(np.log(1), np.log(1e5), nlam)))
@@ -241,7 +281,8 @@ class linreg_wAUC():
         di_idx = dict(zip(['total','within','between'],(idx_all,idx_w,idx_b)))
         di_idx = {z: di_idx[z] for z in tt if z in di_idx}
         print('Learning coefficients across lambdas')
-        x0 = np.array([np.corrcoef(xx[:, jj], lbls)[0, 1] for jj in range(xx.shape[1])])
+        if x0 is None:
+            x0 = np.array([np.corrcoef(xx[:, jj], lbls)[0, 1] for jj in range(xx.shape[1])])
         Bhat = np.zeros([xx.shape[1],nlam,n_tt])
         for k, t in enumerate(tt):
             print('Itetration %i of %i: %s' % (k+1,n_tt,t))
@@ -252,9 +293,6 @@ class linreg_wAUC():
                     offs = 0*offset
                 else:
                     offs = offset.copy()
-                import time as ti
-                from timeit import timeit
-                dcAUC(x0,xx,idx_all,offset,1,int(1e5))
                 Bhat[:, i, k] = minimize(fun=cAUC, jac=dcAUC, x0=x0,
                          args=(xx, idx, offs, l, den2), method='l-bfgs-b').x
                 x0 = Bhat[:, i, k].copy()
@@ -282,11 +320,12 @@ class linreg_wAUC():
             idx_star = val_scores.argmax(axis=0)
             lam_star = {t: self.lam_seq[i] for t, i in zip(tt,idx_star)}
             score_star = {t: val_scores[i,k] for t,i,k in zip(tt,idx_star,range(n_tt))}
+            bhat_star = {t: Bhat[:,i,k] for i,k in zip(idx_star,range(n_tt))}
             self.mdl = {t: {'cls':linreg_wAUC()} for t in tt}
             for t in self.mdl:
                 self.mdl[t]['cls'].fit(data=pd.concat([data,data_val],axis=0),
                     lbls=np.append(lbls,lbls_val), fctr=pd.concat([fctr,fctr_val]),
-                                       tt=[t], lam_seq=[lam_star[t]])
+                       tt=[t], lam_seq=[lam_star[t]],x0=bhat_star[t])
             # Keep only "optimal" coefficients
             self.mdl = {t: {'bhat':self.mdl[t]['cls'].mdl[t]['bhat'].flatten(),
                 'lam':lam_star[t],'score':score_star[t]} for t in self.mdl}

@@ -10,7 +10,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score, average_precision_score, log_loss
 
 from support.support_funs import stopifnot
-from support.mdl_funs import normalize
+from support.mdl_funs import col_encoder
 from support.mdl_funs import idx_iter
 
 # def multistrat_split(Y, prop=0.1):
@@ -25,50 +25,52 @@ from support.mdl_funs import idx_iter
 def sigmoid(x):
     return (1/(1+np.exp(-x)))
 
-# self = mdl #mtask_nn()
-# data=Xtrain;lbls=Ytrain;nepochs=10;mbatch=1000;val_prop=0.1;lr=0.001;ii=0;jj=0
-class mtask_nn(nn.Module):
-    def __init__(self):
-        super(mtask_nn, self).__init__()
-
-    def architecture(self, n_input, n_output):
-        self.n_input = n_input
-        self.n_output = n_output
+class net_architecture(nn.Module):
+    def __init__(self,n_input, n_output):
+        super(net_architecture, self).__init__()
         # -- define architecture -- #
-        self.fc1 = nn.Linear(self.n_input, 100)
-        #self.bn1 = nn.BatchNorm1d(100)
+        self.fc1 = nn.Linear(n_input, 100)
+        # self.bn1 = nn.BatchNorm1d(100)
         self.fc2 = nn.Linear(100, 50)
-        #self.bn2 = nn.BatchNorm1d(50)
+        # self.bn2 = nn.BatchNorm1d(50)
         self.fc3 = nn.Linear(50, 25)
-        #self.bn3 = nn.BatchNorm1d(25)
-        self.fc4 = nn.Linear(25, self.n_output)
+        # self.bn3 = nn.BatchNorm1d(25)
+        self.fc4 = nn.Linear(25, n_output)
 
     def forward(self,x):
-        x = F.leaky_relu(self.fc1(x)) #self.bn1()
+        x = F.leaky_relu(self.fc1(x))
         x = F.leaky_relu(self.fc2(x))
         x = F.leaky_relu(self.fc3(x))
         x = F.leaky_relu(self.fc4(x))
-        return(x)
+        return x
 
-    def transform(self,data,check=True):
-        return( torch.Tensor(self.enc.transform(data, check=check)) )
+# self = mtask_nn()
+# data=Xtrain;lbls=Ytrain;nepochs=1;mbatch=10000;val_prop=0.1;lr=0.001;ii=0;jj=0
+class mtask_nn():
+    def __init__(self):
+        self.device = 'cpu'
+        if torch.cuda.is_available():
+            self.device = 'cuda'
 
-    def predict(self,data,check=True,mbatch=None):
+    def transform(self,data):
+        return torch.from_numpy(self.enc.transform(data)).to(self.device).float()
+
+    def predict(self,data,mbatch=None):
         if mbatch is None:
             mbatch = data.shape[0]
         phat = np.zeros([data.shape[0],self.n_output])
         liter = idx_iter(n=data.shape[0],mbatch=mbatch)
         for idx in liter:
             with torch.no_grad():
-                phat[idx] = self.eval()(self.transform(data.iloc[idx], check)).numpy()
-        return(phat)
+                phat[idx] = self.nnet.eval()(self.transform(data.iloc[idx])).cpu().detach().numpy()
+        return phat
 
     def fit(self, data, lbls, nepochs=100, mbatch=1000, val_prop=0.1, lr=0.001):
         n = data.shape[0]
         stopifnot(n == lbls.shape[0])
         if len(lbls.shape) == 1:
             lbls = lbls.reshape([n, 1])
-        k = lbls.shape[1]
+        self.n_output = lbls.shape[1]
         check, rr = True, 0
         while check:
             rr += 1
@@ -78,19 +80,22 @@ class mtask_nn(nn.Module):
         self.idx_train = idx_train
         self.idx_val = idx_val
         # Find encodings/normalization
-        self.enc = normalize(copy=False)
+        self.enc = col_encoder(dropfirst=False)
         self.enc.fit(data.iloc[idx_train])
+        self.n_input = len(self.enc.cn_transform)
         Yval = lbls.iloc[idx_val].values # Pre-compute for faster eval
         nY_val= np.apply_along_axis(func1d=lambda x: x[~(x==-1)].sum(),axis=0,arr=Yval)
         nY_train = lbls.iloc[idx_train].apply(lambda x: x[~(x == -1)].sum(),0).values
-        wY_train = (n_train / nY_train - 1).reshape([1,k])
+        wY_train = (n_train / nY_train - 1).reshape([1,self.n_output])
         # Define architecture
         torch.manual_seed(1234)
-        self.architecture(n_input=self.enc.p2, n_output=k)
+        self.nnet = net_architecture(n_input=self.n_input, n_output=self.n_output)
+        if self.device == 'cuda':
+            self.nnet.cuda()
         # Create loss function (note we do not set class because weights will be iterative)
         loss_fun = nn.BCEWithLogitsLoss
         # Set up optimizer
-        optimizer = torch.optim.Adagrad(params=self.parameters(), lr=lr)
+        optimizer = torch.optim.Adagrad(params=self.nnet.parameters(), lr=lr)
         self.res = []
         nll_epoch = []
         tstart = time.time()
@@ -101,30 +106,30 @@ class mtask_nn(nn.Module):
             nll_batch = []
             nll_batch_cc = []
             for jj in range(nbatch):
-                # if (jj+1)%10==0:
-                #     print('Batch %i of %i' % (jj+1, nbatch))
+                if (jj+1) % 10==0:
+                    print('Batch %i of %i' % (jj+1, nbatch))
                 idx_jj = idx_train[idx_batches[jj]]
                 optimizer.zero_grad()
                 # --- Forward pass --- #
-                out_jj = self.forward(self.transform(data.iloc[idx_jj],False))
+                out_jj = self.nnet.forward(self.transform(data.iloc[idx_jj]))
                 Y_jj = lbls.iloc[idx_jj].values
-                W_jj = torch.Tensor(np.where(Y_jj == -1, 0, 1) * ((Y_jj * wY_train)+1))
-                Y_jj = torch.Tensor(Y_jj)
+                W_jj = torch.from_numpy(np.where(Y_jj == -1, 0, 1) * ((Y_jj * wY_train) + 1)).to(self.device).float()
+                Y_jj = torch.from_numpy(Y_jj).to(self.device).float()
                 loss_jj = loss_fun(reduction='mean',weight=W_jj)(input=out_jj,target=Y_jj)
                 # --- Backward pass --- #
                 loss_jj.backward()
                 optimizer.step()
                 nll_batch.append(loss_jj.item())
                 with torch.no_grad():
-                    loss_jj_cc = loss_fun(reduction='none', weight=W_jj)(input=out_jj, target=Y_jj).mean(axis=0).numpy()
+                    loss_jj_cc = loss_fun(reduction='none', weight=W_jj)(input=out_jj, target=Y_jj).mean(axis=0).cpu().detach().numpy()
                     nll_batch_cc.append(loss_jj_cc)
             nll_epoch.append(np.mean(nll_batch))
             #df_nll = pd.DataFrame({'cn':lbls.columns,'y1':nY_train,'nll':np.vstack(nll_batch_cc).mean(axis=0)})
             if (ii+1) % 10 == 0:
                 # Check gradient stability
-                for layer, param in self.named_parameters():
+                for layer, param in self.nnet.named_parameters():
                     print('layer: %s, std: %0.4f' % (layer, param.grad.std().item()))
-                # Check for early stpoping
+                # Check for early stopping
                 phat_val = self.predict(data.iloc[idx_val])
                 holder = []
                 for cc in range(Yval.shape[1]):

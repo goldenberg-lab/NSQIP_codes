@@ -4,7 +4,7 @@ import pandas as pd
 import sys
 
 import matplotlib
-matplotlib.use('Agg')
+# matplotlib.use('Agg')
 import seaborn as sns
 
 def stopifnot(stmt):
@@ -106,14 +106,13 @@ def auc_ordinal(y,score):
 # group = np.array(['a','a','b','b','b','c'])
 #print(pd.DataFrame({'y':y,'score':score,'group':group}))
 #y=x.y.values;score=x.phat.values;group=x.cpt.values
-def auc_decomp(y,score,group):
+def auc_decomp(y,score,group,rand=False):
     stopifnot(len(y)==len(score)==len(group))
     auc_tot, n_tot = auc(y,score, both=True) # will also check for errors
-
     ugroup = np.unique(group)
     ugroup1 = ugroup[np.where([sum(y[group==gg]==1)>=1 for gg in ugroup])[0]]
     #group0 = ugroup[np.where([sum(y[group == gg] == 0) >= 1 for gg in ugroup])[0]]
-    gwise_auc = [auc(y[group==gg],score[group == gg],both=True) for gg in ugroup]
+    gwise_auc = [auc(y[group==gg],score[group == gg],both=True,rand=rand) for gg in ugroup]
     df_gwise = pd.DataFrame(np.array(gwise_auc),columns=['auc','den'])
     df_gwise.den = df_gwise.den.astype(int)
     df_gwise.insert(0,'group',ugroup)
@@ -127,9 +126,8 @@ def auc_decomp(y,score,group):
         idx_ingroup = (group == gg) & (y==1)
         idx_outgroup = ~(group == gg) & (y == 0)
         holder.append(auc(np.append(y[idx_ingroup],y[idx_outgroup]),
-                np.append(score[idx_ingroup], score[idx_outgroup]),both=True))
+                np.append(score[idx_ingroup], score[idx_outgroup],rand=rand),both=True))
     df_between = pd.DataFrame(np.array(holder),columns=['auc','den'])
-    #df_between.den = df_between.den.astype(int)
     stopifnot(df_between.den.sum() == n_between)
     df_between = df_between.assign(num=lambda x: (x.den * x.auc)) #.astype(int)
     auc_between = df_between.num.sum() / n_between
