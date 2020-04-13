@@ -215,6 +215,13 @@ for fn in fn_auc:
 df_eta = pd.concat(holder_eta).melt(['y','cpt','lbl','operyr'],None,'mdl','eta')
 df_bhat = pd.concat(holder_bhat).reset_index().melt(['index','operyr','cn','lbl',
              'bhat','tt'],None,'bs_iter').drop(columns=['index'])
+# qq = df_eta[(df_eta.lbl == 'agg_ssi2') & (df_eta.mdl == 'total')]
+# plt.close()
+# g = sns.FacetGrid(qq,hue='y')
+# g.map(sns.distplot,'eta')
+# g.savefig(os.path.join(dir_figures,'phat_dist.png'))
+# print(np.round(qq.groupby('y').eta.apply(lambda x: pd.Series({'mu':x.mean(),'se':x.std()})).reset_index(),2))
+
 # Get summary statistics
 cidx_eta = ['lbl','operyr','mdl']
 df_eta = df_eta.groupby(cidx_eta).apply(lambda x:
