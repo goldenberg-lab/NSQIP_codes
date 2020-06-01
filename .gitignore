@@ -1,2 +1,3 @@
 # ignore pycharm stuff
 .idea/*
+support/__pycache__/*
