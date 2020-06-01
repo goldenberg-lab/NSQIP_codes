@@ -96,7 +96,7 @@ res_all = pd.concat(holder_vv).reset_index(drop=True)
 res_all.insert(0,'tt','all')
 
 ##############################################
-# ---- STEP 4: COMBINE RESULTS AND SAVEFFdsdsdfsdfmnjm jmn  mnj mnjd ---- #
+# ---- STEP 4: COMBINE RESULTS AND SAVE ---- #
 
 res_both = pd.concat([res_cpt, res_all],axis=0).reset_index(drop=True)
 res_both.to_csv(os.path.join(dir_output,'naivebayes_results.csv'),index=False)

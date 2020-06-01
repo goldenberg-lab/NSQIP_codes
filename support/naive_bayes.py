@@ -47,7 +47,7 @@ class mbatch_NB():
     def fit(self, data, lbls, mbatch=100):
         self.n, self.p = data.shape
         stopifnot(len(lbls) == self.n)
-        self.enc = normalize(copy=False)
+        self.enc = normalize()
         self.enc.fit(data)  # Get the one-hot encoders
         # Make lists of the indices
         self.lst_enc = [self.enc.cenc, self.enc.nenc]

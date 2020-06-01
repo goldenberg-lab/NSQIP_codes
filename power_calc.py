@@ -1,3 +1,7 @@
+"""
+SCRIPT TO GET RANGE OF ESTIMATES FOR A GIVEN SAMPLE SIZE
+"""
+
 import numpy as np
 import pandas as pd
 import matplotlib, os
@@ -51,26 +55,40 @@ mu0, mu1 = -3.73, -2.99
 se0, se1 = 1.00, 0.93
 
 # For target of 60% sensitivity:
-sens_s60 = 0.6
+sens_s60 = 0.7
 t_s60 = isens(sens_s60, mu1, se1)
 fpr_s60 = fpr(t_s60, mu0, se0)
-ybar = 40 / 440 #0.03034
+ybar = 0.03
 ppv_s60 = (sens_s60 * ybar) / ( (sens_s60 * ybar) + (fpr_s60 * (1-ybar)) )
 
 print('Sensitivity: %0.3f, FPR: %0.3f, and PPV: %0.3f' %
       (sens_s60, fpr_s60, ppv_s60))
 
-n_tot = 440
-nsim = 10000
-mat = np.zeros([nsim,2])
-for ii in range(nsim):
-    if (ii+1) % 1000 == 0:
-        print('Simulation %i of %i' % (ii+1, nsim))
-    x, y = dgp_yeta(n=n_tot, mu1=mu1, prop=ybar, se1=se1, mu0=mu0, se0=se0)
-    ii_sens, ii_ppv = calc_sens(x, y, t_s60), calc_ppv(x, y, t_s60)
-    mat[ii] = ii_sens, ii_ppv
+nsim = 1000
+ii_seq = np.arange(1,5)
+tot_seq = ii_seq*int(np.ceil(22 / 0.03))
+mat_sens = np.zeros([nsim, len(tot_seq)])
+mat_ppv = np.zeros([nsim, len(tot_seq)])
+for jj, n_tot in enumerate(tot_seq):
+    for ii in range(nsim):
+        if (ii+1) % 1000 == 0:
+            print('Simulation %i of %i' % (ii+1, nsim))
+        x, y = dgp_yeta(n=n_tot, mu1=mu1, prop=ybar, se1=se1, mu0=mu0, se0=se0)
+        ii_sens, ii_ppv = calc_sens(x, y, t_s60), calc_ppv(x, y, t_s60)
+        mat_sens[ii,jj] = ii_sens
+        mat_ppv[ii,jj] = ii_ppv
+df_res = pd.concat([pd.DataFrame(mat_sens).melt(None,None,'idx','value').assign(metric='Sensitivity'),
+                    pd.DataFrame(mat_ppv).melt(None,None,'idx','value').assign(metric='PPV')],0).reset_index(None,True)
+df_res['n_tot'] = (df_res.idx+1).map(dict(zip(ii_seq, tot_seq)))
+df_res['y1'] = (df_res.n_tot * ybar).astype(int)
 
-df_sim = pd.DataFrame(mat,columns=['Sensitivity','PPV']).melt(None,None,'metric','value')
+qq = df_res.groupby(['metric','n_tot','y1']).value.apply(lambda x: pd.Series({'mu':x.mean(),
+            'lb':x.quantile(0.025),'ub':x.quantile(0.975)})).reset_index()
+qq = qq.pivot_table('value',['metric','n_tot','y1'], 'level_3').reset_index()
+qq = qq.assign(diff = lambda x: x.mu - x.lb)
+print(np.round(qq,2).sort_values('metric',ascending=False).rename(columns={'n_tot':'# Total', 'y1':'# of SSI',
+                                     'lb':'CI-LB','mu':'Target','ub':'CI-UB'}))
+
 
 def hist_with_95CI(*args,**kwargs):
     data = kwargs.pop('data')
@@ -85,7 +103,7 @@ def hist_with_95CI(*args,**kwargs):
 plt.close()
 g = sns.FacetGrid(df_sim,col='metric',sharex=False,sharey=False)
 g.map_dataframe(hist_with_95CI,'value')
-g.savefig(os.path.join(dir_figures,'SSI_sim_440.png'))
+g.savefig(os.path.join(dir_figures,'SSI_sim.png'))
 
 
 
