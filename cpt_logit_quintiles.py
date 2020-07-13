@@ -43,6 +43,7 @@ dat = pd.merge(dat_Y, dat_X, on='caseid')
 # ---- STEP 2: LEAVE-ONE-YEAR - AGGREGATE MODEL AUC FOR QUINTILE BINS AND CPT---- #
 
 # LIST FOR BIN AUC AND CPT (WITHIN BIN) AUC FOR AGGREGATE MODEL
+outcome_coef = []
 outcome_bin = []
 outcome_cpt = []
 
@@ -58,25 +59,32 @@ for ii, vv in enumerate(cn_Y):
     # GET QUINTILES
     cpt_groups['bin'] = pd.qcut(cpt_groups['outcome_mean'], 5, labels=False)
 
+    # subet data by cpt groups
+    sub_cpts = cpt_groups.cpt.unique()
+
+    # subset data by cpts
+    sub_dat = dat[dat['cpt'].isin(sub_cpts)].reset_index(drop=False)
+
     # GET TRAIN YEARS
-    tmp_ii = pd.concat([dat.operyr, dat[vv] == -1], axis=1)
+    tmp_ii = pd.concat([sub_dat.operyr, dat[vv] == -1], axis=1)
     tmp_ii = tmp_ii.groupby('operyr')[vv].apply(np.sum).reset_index().rename(columns={vv: 'n'})
     tmp_years = tmp_ii[tmp_ii.n == 0].operyr.values
     tmp_years = tmp_years.astype(int)
     tmp_train_years = tmp_years[tmp_years > (tmp_years.min())]
 
+    year_coef = []
     year_bin = []
     year_cpt = []
     for yy in tmp_train_years:
         print('Train Year %i' % (yy))
-        idx_train = dat.operyr.isin(tmp_years) & (dat.operyr < yy)
-        idx_test = dat.operyr.isin(tmp_years) & (dat.operyr == yy)
+        idx_train = sub_dat.operyr.isin(tmp_years) & (sub_dat.operyr < yy)
+        idx_test = sub_dat.operyr.isin(tmp_years) & (sub_dat.operyr == yy)
 
         # GET TRAIN AND TEST DATA
-        Xtrain, Xtest = dat.loc[idx_train, cn_X].reset_index(drop=True), \
-                        dat.loc[idx_test, cn_X].reset_index(drop=True)
-        ytrain, ytest = dat.loc[idx_train, [vv]].reset_index(drop=True), \
-                        dat.loc[idx_test, [vv]].reset_index(drop=True)
+        Xtrain, Xtest = sub_dat.loc[idx_train, cn_X].reset_index(drop=True), \
+                        sub_dat.loc[idx_test, cn_X].reset_index(drop=True)
+        ytrain, ytest = sub_dat.loc[idx_train, [vv]].reset_index(drop=True), \
+                        sub_dat.loc[idx_test, [vv]].reset_index(drop=True)
 
         # STORE CPT CODES
         tmp_cpt = Xtest.cpt
@@ -91,6 +99,13 @@ for ii, vv in enumerate(cn_Y):
 
         # TEST MODEL
         logit_preds = logit_fit.predict_proba(Xtest)[:, 1]
+
+        # get coefficients from model
+        coef = logit_fit.coef_
+
+        tmp_coef = []
+        tmp_coef.append(pd.DataFrame({'coef': list(coef)}, index=[0]))
+
 
         # GET BIN NAMES FOR LOOP
         cpt_bin = cpt_groups.bin.sort_values().unique()
@@ -123,6 +138,7 @@ for ii, vv in enumerate(cn_Y):
                     cpt_holder.append(pd.DataFrame({'auc': 'NA',
                                                     'cpt': cc,
                                                     'num_obs': cpt_tmp_holder.y_values.size}, index=[0]))
+
                 else:
                     cpt_holder.append(pd.DataFrame({'auc': metrics.roc_auc_score(list(cpt_tmp_holder.y_values.values),
                                                                    list(cpt_tmp_holder.y_preds.values)),
@@ -141,8 +157,10 @@ for ii, vv in enumerate(cn_Y):
                                                 'bin': bb,
                                                 'num_obs': bin_tmp_holder.y_values.size}, index=[0]))
 
+        year_coef.append(pd.concat(tmp_coef).assign(test_year=yy))
         year_cpt.append(pd.concat(cpt_bin_holder).assign(test_year=yy))
         year_bin.append(pd.concat(bin_holder).assign(test_year=yy))
+    outcome_coef.append(pd.concat(year_coef).assign(outcome=vv))
     outcome_cpt.append(pd.concat(year_cpt).assign(outcome=vv))
     outcome_bin.append(pd.concat(year_bin).assign(outcome=vv))
 
@@ -155,11 +173,17 @@ agg_auc_cpt.to_csv(os.path.join(dir_output, 'logit_auc_agg_quin_cpt.csv'), index
 agg_auc_bin = pd.concat(outcome_bin).reset_index(drop=True)
 agg_auc_bin.to_csv(os.path.join(dir_output, 'logit_auc_agg_quin_bin.csv'), index=False)
 
+# SAVE coefficients for agg model
+agg_coef = pd.concat(outcome_coef).reset_index(drop=True)
+agg_coef.to_csv(os.path.join(dir_output, 'logit_agg_coef.csv'), index=False)
+
 ####################################################
 # ---- STEP 3: LEAVE-ONE-YEAR - SUB MODEL AUC FOR QUINTILE BINS AND CPT---- #
 
 # LIST FOR BIN AUC AND CPT (WITHIN BIN) AUC FOR SUB MODELS
 
+outcome_bin_coef = []
+outcome_cpt_coef = []
 outcome_bin = []
 outcome_cpt = []
 
@@ -175,6 +199,12 @@ for ii, vv in enumerate(cn_Y):
     # GET BINS
     cpt_groups['bin'] = pd.qcut(cpt_groups['outcome_mean'], 5, labels=False)
 
+    # subet data by cpt groups
+    sub_cpts = cpt_groups.cpt.unique()
+
+    # subset data by cpts
+    sub_dat = dat[dat['cpt'].isin(sub_cpts)].reset_index(drop=False)
+
     # GET TRAIN YEARS
     tmp_ii = pd.concat([dat.operyr, dat[vv] == -1], axis=1)
     tmp_ii = tmp_ii.groupby('operyr')[vv].apply(np.sum).reset_index().rename(columns={vv: 'n'})
@@ -182,23 +212,27 @@ for ii, vv in enumerate(cn_Y):
     tmp_years = tmp_years.astype(int)
     tmp_train_years = tmp_years[tmp_years > (tmp_years.min())]
 
+    year_cpt_coef = []
+    year_bin_coef = []
     year_bin = []
     year_cpt = []
     for yy in tmp_train_years:
         print('Train Year %i' % (yy))
-        idx_train = dat.operyr.isin(tmp_years) & (dat.operyr < yy)
-        idx_test = dat.operyr.isin(tmp_years) & (dat.operyr == yy)
+        idx_train = sub_dat.operyr.isin(tmp_years) & (sub_dat.operyr < yy)
+        idx_test = sub_dat.operyr.isin(tmp_years) & (sub_dat.operyr == yy)
 
         # TRAIN AND TEST DATA
-        Xtrain, Xtest = dat.loc[idx_train, cn_X].reset_index(drop=True), \
-                        dat.loc[idx_test, cn_X].reset_index(drop=True)
-        ytrain, ytest = dat.loc[idx_train, [vv]].reset_index(drop=True), \
-                        dat.loc[idx_test, [vv]].reset_index(drop=True)
+        Xtrain, Xtest = sub_dat.loc[idx_train, cn_X].reset_index(drop=True), \
+                        sub_dat.loc[idx_test, cn_X].reset_index(drop=True)
+        ytrain, ytest = sub_dat.loc[idx_train, [vv]].reset_index(drop=True), \
+                        sub_dat.loc[idx_test, [vv]].reset_index(drop=True)
 
         # GET UNIQUE BINS FOR LOOP
         cpt_bin = cpt_groups.bin.sort_values().unique()
         bin_holder = []
+        bin_coef_holder =[]
         cpt_bin_holder = []
+        cpt_bin_coef_holder = []
         for bb in cpt_bin:
             # SUBSET BY BIN
             tmp_bins = cpt_groups[cpt_groups['bin']==bb]
@@ -214,6 +248,7 @@ for ii, vv in enumerate(cn_Y):
             # GET CPT CODES
             cpt_codes = tmp_bins.cpt.sort_values().unique()
             cpt_holder = []
+            cpt_coef_holder = []
             for cc in cpt_codes:
                 # GET CPTS CODES FROM CURRENT BIN
                 tmp_cpts = tmp_bins[tmp_bins['cpt'] == cc]
@@ -235,6 +270,9 @@ for ii, vv in enumerate(cn_Y):
                     cpt_holder.append(pd.DataFrame({'auc': 'NA',
                                                     'cpt': cc,
                                                     'num_obs': cpt_ytest.values.size}, index=[0]))
+                    cpt_coef_holder.append(pd.DataFrame({'coef':'NA',
+                                                         'cpt': cc,
+                                                         'num_obs': cpt_ytest.values.size}, index=[0]))
                 else:
                     # TRAIN MODEL
                     logisticreg = LogisticRegression(solver='liblinear', max_iter=200)
@@ -243,17 +281,29 @@ for ii, vv in enumerate(cn_Y):
                     # TEST MODEL
                     logit_preds = logit_fit.predict_proba(cpt_xtest)[:, 1]
 
+                    # get coefficients from model
+                    coef_cpt = logit_fit.coef_
+
                     cpt_holder.append(
                         pd.DataFrame({'auc': metrics.roc_auc_score(cpt_ytest.values, logit_preds),
                                       'cpt': cc,
                                       'num_obs': cpt_ytest.values.size}, index=[0]))
+                    cpt_coef_holder.append(pd.DataFrame({'coef':list(coef_cpt),
+                                                         'cpt': cc,
+                                                         'num_obs':cpt_ytest.values.size}, index=[0]))
+
+
             cpt_bin_holder.append(pd.concat(cpt_holder).assign(bin=bb))
+            cpt_bin_coef_holder.append(pd.concat(cpt_coef_holder).assign(bin=bb))
 
 
             if all(np.unique(bin_ytrain.values) == 0) or all(np.unique(bin_ytest.values) == 0):
                 bin_holder.append(pd.DataFrame({'auc': 'NA',
                                                 'bin': bb,
                                                 'num_obs': bin_ytest.values.size}, index=[0]))
+                bin_coef_holder.append(pd.DataFrame({'coef': 'NA',
+                                                    'bin': bb,
+                                                     'num_obs': bin_ytest.values.size}, index=[0]))
             else:
                 # REMOVE CPT COLUMN
                 del bin_xtrain['cpt']
@@ -266,13 +316,22 @@ for ii, vv in enumerate(cn_Y):
                 # TEST MODEL
                 logit_preds = logit_fit.predict_proba(bin_xtest)[:, 1]
 
-                bin_holder.append(
-                    pd.DataFrame({'auc': metrics.roc_auc_score(bin_ytest.values, logit_preds),
+                # get coefficients from model
+                coef_bin = logit_fit.coef_
+
+
+                bin_holder.append(pd.DataFrame({'auc': metrics.roc_auc_score(bin_ytest.values, logit_preds),
                                   'bin': bb,
                                   'num_obs': bin_ytest.values.size}, index=[0]))
-
+                bin_coef_holder.append(pd.DataFrame({'coef': list(coef_bin),
+                                                'bin': bb,
+                                                'num_obs': bin_ytest.values.size}, index=[0]))
+        year_cpt_coef.append(pd.concat(cpt_bin_coef_holder).assign(test_year=yy))
+        year_bin_coef.append(pd.concat(bin_coef_holder).assign(test_year=yy))
         year_cpt.append(pd.concat(cpt_bin_holder).assign(test_year=yy))
         year_bin.append(pd.concat(bin_holder).assign(test_year=yy))
+    outcome_cpt_coef.append(pd.concat(year_cpt_coef).assign(outcome=vv))
+    outcome_bin_coef.append(pd.concat(year_bin_coef).assign(outcome=vv))
     outcome_cpt.append(pd.concat(year_cpt).assign(outcome=vv))
     outcome_bin.append(pd.concat(year_bin).assign(outcome=vv))
 
@@ -281,6 +340,12 @@ for ii, vv in enumerate(cn_Y):
 agg_auc_cpt = pd.concat(outcome_cpt).reset_index(drop=True)
 agg_auc_cpt.to_csv(os.path.join(dir_output, 'logit_auc_sub_quin_cpt.csv'), index=False)
 
+agg_coef_cpt = pd.concat(outcome_cpt_coef).reset_index(drop=True)
+agg_coef_cpt.to_csv(os.path.join(dir_output, 'logit_coef_sub_cpt.csv'), index=False)
+
 # SAVE AUC FOR QUNITILE BINS FOR SUB MODELS
 agg_auc_bin = pd.concat(outcome_bin).reset_index(drop=True)
 agg_auc_bin.to_csv(os.path.join(dir_output, 'logit_auc_sub_quin_bin.csv'), index=False)
+
+agg_coef_bin = pd.concat(outcome_bin_coef).reset_index(drop=True)
+agg_coef_bin.to_csv(os.path.join(dir_output, 'logit_coef_sub_bin.csv'), index=False)
