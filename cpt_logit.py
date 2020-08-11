@@ -163,7 +163,6 @@ res_y_all.to_csv(os.path.join(dir_output, 'logit_auc_each_cpt_within.csv'), inde
 
 ###############################################
 # ---- STEP 4: LEAVE-ONE-YEAR - ALL VARIABLES (RISK SCORE INSTEAD OF CPT SCORE) ---- #
-# NEEDS TO BE FIXED
 
 # READ IN RISK SCORES
 file_name = 'nbayes_phat.csv'

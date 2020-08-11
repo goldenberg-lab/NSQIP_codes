@@ -29,12 +29,12 @@ dat_X = pd.get_dummies(dat_X)
 dat_X['cpt'] = 'c' + dat_X.cpt.astype(str)
 
 # GET CPT ANNOTATIONS
-file_name = 'cpt_anno.csv'
+file_name = 'cpt_anno_organ.csv'
 cpt_anno = pd.read_csv(os.path.join(dir_output, file_name))
 cpt_anno['cpt'] = 'c' + cpt_anno.cpt.astype(str)
 
 # GROUP BY TITLE AND GET COUNTS - REMOVE GROUPS WITH ONLY 1 COUNT
-cpt_groups = cpt_anno.groupby('title').size().sort_values(ascending=False)
+cpt_groups = cpt_anno.groupby('organ').size().sort_values(ascending=False)
 cpt_groups = pd.DataFrame({'cpt_title': cpt_groups.index, 'count': cpt_groups.values})
 
 # KEEP CPT TITLES THAT HAVE MORE THAN ONE CPT CODE ASSOCIATED WITH THEM
@@ -42,11 +42,8 @@ top_groups = cpt_groups[cpt_groups['count'] > 1]
 top_groups = top_groups.cpt_title.unique()
 
 # SUBSET CPT GROUPS TO KEEP ONLY CPTS THAT HAVE A CORRESPONDING TITLE
-cpt_anno = cpt_anno[cpt_anno.title.isin(top_groups)].reset_index(drop=True)
+cpt_anno = cpt_anno[cpt_anno.organ.isin(top_groups)].reset_index(drop=True)
 top_cpts = cpt_anno.cpt.unique()
-
-# SUBSET CPT_GROUPS TO GET
-# HERE NEED TO FIND A WAY TO GET THE CPT NAMES ASSOCIATED WITH EACH TITLE (MAYBE REFORMAT DATA IN R)
 
 # SUBET BY DATA FRAMES BY CPT CODES
 dat_X = dat_X[dat_X.cpt.isin(top_cpts)].reset_index(drop=True)
@@ -78,15 +75,16 @@ for ii, vv in enumerate(cn_Y):
         print('Train Year %i' % (yy))
         idx_train = dat_X.operyr.isin(tmp_years) & (dat_X.operyr < yy)
         idx_test = dat_X.operyr.isin(tmp_years) & (dat_X.operyr == yy)
+        # get dummies
         Xtrain, Xtest = dat_X.loc[idx_train, cn_X].reset_index(drop=True), \
                         dat_X.loc[idx_test, cn_X].reset_index(drop=True)
         ytrain, ytest = dat_Y.loc[idx_train, [vv]].reset_index(drop=True), \
                         dat_Y.loc[idx_test, [vv]].reset_index(drop=True)
 
-        # STORE CPT CODES
+        # STORE CPTS
         tmp_cpt = Xtest.cpt
 
-        # REMOVE CPT CODES
+        # REMOVE CPTS
         del Xtrain['cpt']
         del Xtest['cpt']
 
@@ -99,14 +97,15 @@ for ii, vv in enumerate(cn_Y):
 
         # STORE RESULTS FROM AGGREGATE MODEL
         tmp_holder = pd.DataFrame({'y_preds': list(logit_preds), 'y_values': list(ytest.values), 'cpt': list(tmp_cpt)})
+
+        # GET ORGAN GROUPS
+        top_titles = cpt_anno.organ.unique()
         within_holder = []
 
-        # GET TOP TITLES
-        top_titles = cpt_anno.title.unique()
-
-        # LOOP THROUGH EACH CPT TITLE
+        # LOOP THROUGH EACH ORGAN GROUP
         for cc in top_titles:
-            title_cpts = cpt_anno[cpt_anno['title']==cc].reset_index(drop=True)
+            # SUBSET DATA BY ORGAN GROUP
+            title_cpts = cpt_anno[cpt_anno['organ']==cc].reset_index(drop=True)
             title_cpts = title_cpts.cpt.unique()
             sub_tmp_holder = tmp_holder[tmp_holder['cpt'].isin(title_cpts)].reset_index(drop=True)
             if all(sub_tmp_holder.y_values.values == 0) or len(sub_tmp_holder.y_values.values) <= 1:
@@ -121,7 +120,7 @@ for ii, vv in enumerate(cn_Y):
     holder_y_all.append(pd.concat(holder_y).assign(outcome=vv))
 
 res_y_all = pd.concat(holder_y_all).reset_index(drop=True)
-res_y_all.to_csv(os.path.join(dir_output, 'agg_auc_cpt_title'), index=False)
+res_y_all.to_csv(os.path.join(dir_output, 'agg_auc_cpt_organ.csv'), index=False)
 
 ####################################################
 # ---- STEP 3: LEAVE-ONE-YEAR - ALL VARIABLES, FOR EACH CPT CODE, SUB MODELS---- #
@@ -140,19 +139,19 @@ for ii, vv in enumerate(cn_Y):
         print('Train Year %i' % (yy))
         idx_train = dat_X.operyr.isin(tmp_years) & (dat_X.operyr < yy)
         idx_test = dat_X.operyr.isin(tmp_years) & (dat_X.operyr == yy)
-        # get dummies
         Xtrain, Xtest = dat_X.loc[idx_train, cn_X].reset_index(drop=True), \
                         dat_X.loc[idx_test, cn_X].reset_index(drop=True)
         ytrain, ytest = dat_Y.loc[idx_train, [vv]].reset_index(drop=True), \
                         dat_Y.loc[idx_test, [vv]].reset_index(drop=True)
 
-        # GET TOP TITLES TO LOOP THROUGH
-        top_titles = cpt_anno.title.unique()
+        # GET ORGAN GROUPS
+        top_titles = cpt_anno.organ.unique()
         within_holder = []
+        # LOOP THROUGH ORGAN GROUPS
         for cc in top_titles:
 
-            # GET LIST OF TITLES
-            title_cpts = cpt_anno[cpt_anno['title'] == cc].reset_index(drop=True)
+            # SUSET BY ORGAN
+            title_cpts = cpt_anno[cpt_anno['organ'] == cc].reset_index(drop=True)
             title_cpts = list(title_cpts.cpt.unique())
 
             # SUBSET XTRAIN AND XTEST BY CPT CODE
@@ -163,7 +162,7 @@ for ii, vv in enumerate(cn_Y):
             sub_ytrain = ytrain[ytrain.index.isin(sub_xtrain.index)]
             sub_ytest = ytest[ytest.index.isin(sub_xtest.index)]
 
-            # REVMOVE CPT COLUMN
+            # REMOVE CPT COLUMN
             del sub_xtrain['cpt']
             del sub_xtest['cpt']
 
@@ -186,5 +185,5 @@ for ii, vv in enumerate(cn_Y):
     holder_y_all.append(pd.concat(holder_y).assign(outcome=vv))
 
 res_y_all = pd.concat(holder_y_all).reset_index(drop=True)
-res_y_all.to_csv(os.path.join(dir_output, 'sub_auc_cpt_title.csv'), index=False)
+res_y_all.to_csv(os.path.join(dir_output, 'sub_auc_cpt_organ.csv'), index=False)
 

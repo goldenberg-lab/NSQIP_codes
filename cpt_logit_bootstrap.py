@@ -28,25 +28,13 @@ dat_X = pd.get_dummies(dat_X)
 # !! ENCODE CPT AS CATEGORICAL !! #
 dat_X['cpt'] = 'c' + dat_X.cpt.astype(str)
 
-# GET CPT ANNOTATIONS
-file_name = 'cpt_anno.csv'
-cpt_anno = pd.read_csv(os.path.join(dir_output, file_name))
-cpt_anno['cpt'] = 'c' + cpt_anno.cpt.astype(str)
+# GROUPBY CPT AND GET NUMBER OF OBSERVATIONS
+top_cpts = dat_X.groupby('cpt').size().sort_values(ascending=False)
+top_cpts = pd.DataFrame({'cpt': top_cpts.index, 'count': top_cpts.values})
 
-# GROUP BY TITLE AND GET COUNTS - REMOVE GROUPS WITH ONLY 1 COUNT
-cpt_groups = cpt_anno.groupby('title').size().sort_values(ascending=False)
-cpt_groups = pd.DataFrame({'cpt_title': cpt_groups.index, 'count': cpt_groups.values})
-
-# KEEP CPT TITLES THAT HAVE MORE THAN ONE CPT CODE ASSOCIATED WITH THEM
-top_groups = cpt_groups[cpt_groups['count'] > 1]
-top_groups = top_groups.cpt_title.unique()
-
-# SUBSET CPT GROUPS TO KEEP ONLY CPTS THAT HAVE A CORRESPONDING TITLE
-cpt_anno = cpt_anno[cpt_anno.title.isin(top_groups)].reset_index(drop=True)
-top_cpts = cpt_anno.cpt.unique()
-
-# SUBSET CPT_GROUPS TO GET
-# HERE NEED TO FIND A WAY TO GET THE CPT NAMES ASSOCIATED WITH EACH TITLE (MAYBE REFORMAT DATA IN R)
+# KEEP ONLY CPT CODES WITH OVER 1000
+top_cpts = top_cpts[top_cpts['count'] > 1000]
+top_cpts = top_cpts.cpt.unique()
 
 # SUBET BY DATA FRAMES BY CPT CODES
 dat_X = dat_X[dat_X.cpt.isin(top_cpts)].reset_index(drop=True)
@@ -78,15 +66,15 @@ for ii, vv in enumerate(cn_Y):
         print('Train Year %i' % (yy))
         idx_train = dat_X.operyr.isin(tmp_years) & (dat_X.operyr < yy)
         idx_test = dat_X.operyr.isin(tmp_years) & (dat_X.operyr == yy)
+        # get dummies
         Xtrain, Xtest = dat_X.loc[idx_train, cn_X].reset_index(drop=True), \
                         dat_X.loc[idx_test, cn_X].reset_index(drop=True)
         ytrain, ytest = dat_Y.loc[idx_train, [vv]].reset_index(drop=True), \
                         dat_Y.loc[idx_test, [vv]].reset_index(drop=True)
 
-        # STORE CPT CODES
+        # store cpt code
         tmp_cpt = Xtest.cpt
-
-        # REMOVE CPT CODES
+        # remove cpt code
         del Xtrain['cpt']
         del Xtest['cpt']
 
@@ -96,32 +84,12 @@ for ii, vv in enumerate(cn_Y):
 
         # PREDICT
         logit_preds = logit_fit.predict_proba(Xtest)[:, 1]
+        holder_y.append(pd.DataFrame({'y_preds': list(logit_preds), 'y_values': list(ytest.values), 'cpt': list(tmp_cpt), 'test_year': yy}))
 
-        # STORE RESULTS FROM AGGREGATE MODEL
-        tmp_holder = pd.DataFrame({'y_preds': list(logit_preds), 'y_values': list(ytest.values), 'cpt': list(tmp_cpt)})
-        within_holder = []
-
-        # GET TOP TITLES
-        top_titles = cpt_anno.title.unique()
-
-        # LOOP THROUGH EACH CPT TITLE
-        for cc in top_titles:
-            title_cpts = cpt_anno[cpt_anno['title']==cc].reset_index(drop=True)
-            title_cpts = title_cpts.cpt.unique()
-            sub_tmp_holder = tmp_holder[tmp_holder['cpt'].isin(title_cpts)].reset_index(drop=True)
-            if all(sub_tmp_holder.y_values.values == 0) or len(sub_tmp_holder.y_values.values) <= 1:
-                within_holder.append(pd.DataFrame({'auc': 'NA',
-                                                   'cpt': cc}, index=[0]))
-            else:
-                within_holder.append(pd.DataFrame({'auc': metrics.roc_auc_score(list(sub_tmp_holder.y_values.values),
-                                                                                list(sub_tmp_holder.y_preds.values)),
-                                                   'cpt': cc}, index=[0]))
-
-        holder_y.append(pd.concat(within_holder).assign(test_year=yy))
     holder_y_all.append(pd.concat(holder_y).assign(outcome=vv))
 
 res_y_all = pd.concat(holder_y_all).reset_index(drop=True)
-res_y_all.to_csv(os.path.join(dir_output, 'agg_auc_cpt_title'), index=False)
+res_y_all.to_csv(os.path.join(dir_output, 'logit_auc_agg_boot.csv'), index=False)
 
 ####################################################
 # ---- STEP 3: LEAVE-ONE-YEAR - ALL VARIABLES, FOR EACH CPT CODE, SUB MODELS---- #
@@ -146,30 +114,25 @@ for ii, vv in enumerate(cn_Y):
         ytrain, ytest = dat_Y.loc[idx_train, [vv]].reset_index(drop=True), \
                         dat_Y.loc[idx_test, [vv]].reset_index(drop=True)
 
-        # GET TOP TITLES TO LOOP THROUGH
-        top_titles = cpt_anno.title.unique()
         within_holder = []
-        for cc in top_titles:
-
-            # GET LIST OF TITLES
-            title_cpts = cpt_anno[cpt_anno['title'] == cc].reset_index(drop=True)
-            title_cpts = list(title_cpts.cpt.unique())
-
+        for cc in top_cpts:
+            #print('cpt %s' % (cc))
             # SUBSET XTRAIN AND XTEST BY CPT CODE
-            sub_xtrain = Xtrain[Xtrain['cpt'].isin(title_cpts)]
-            sub_xtest = Xtest[Xtest['cpt'].isin(title_cpts)]
+            sub_xtrain = Xtrain[Xtrain['cpt'] == cc]
+            sub_xtest = Xtest[Xtest['cpt'] == cc]
 
             # SUBSET YTRAIN AND YTEST BY THE CORRESPONDING INDICES IN SUBSETTED XDATA
             sub_ytrain = ytrain[ytrain.index.isin(sub_xtrain.index)]
             sub_ytest = ytest[ytest.index.isin(sub_xtest.index)]
 
-            # REVMOVE CPT COLUMN
+            # remove cpt column
             del sub_xtrain['cpt']
             del sub_xtest['cpt']
 
             # FILL RESULTS WITH NA IF TRAIN OR TEST OUTCOMES ARE ALL ONE VALUE
-            if all(np.unique(sub_ytrain.values) == 0) or all(np.unique(sub_ytest.values) == 0) or all(sub_ytest.values == 1) or len(sub_ytest.values) <= 1:
-                within_holder.append(pd.DataFrame({'auc': 'NA',
+            if all(np.unique(sub_ytrain.values) == 0) or all(np.unique(sub_ytest.values) == 0):
+                within_holder.append(pd.DataFrame({'y_preds': 'NA',
+                                                   'y_values': 'NA',
                                                    'cpt': cc}, index=[0]))
             else:
                 # TRAIN MODEL
@@ -179,12 +142,10 @@ for ii, vv in enumerate(cn_Y):
                 # TEST MODEL
                 logit_preds = logit_fit.predict_proba(sub_xtest)[:, 1]
 
-                within_holder.append(
-                    pd.DataFrame({'auc': metrics.roc_auc_score(sub_ytest.values, logit_preds), 'cpt': cc}, index=[0]))
+                within_holder.append(pd.DataFrame({'y_preds': list(logit_preds), 'y_values': list(sub_ytest.values), 'cpt': cc}))
 
         holder_y.append(pd.concat(within_holder).assign(test_year=yy))
     holder_y_all.append(pd.concat(holder_y).assign(outcome=vv))
 
 res_y_all = pd.concat(holder_y_all).reset_index(drop=True)
-res_y_all.to_csv(os.path.join(dir_output, 'sub_auc_cpt_title.csv'), index=False)
-
+res_y_all.to_csv(os.path.join(dir_output, 'logit_auc_sub_boot.csv'), index=False)

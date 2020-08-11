@@ -13,7 +13,6 @@ import statsmodels.api as sm
 from pandas.core.groupby.groupby import DataError
 
 
-
 ###############################
 # ---- STEP 1: LOAD DATA ---- #
 dir_base = os.getcwd()
@@ -61,10 +60,10 @@ for ii, vv in enumerate(cn_Y):
     # GET QUINTILES
     cpt_groups['bin'] = pd.qcut(cpt_groups['outcome_mean'], 5, labels=False)
 
-    # subet data by cpt groups
+    # GET LIST OF CPTS
     sub_cpts = cpt_groups.cpt.unique()
 
-    # subset data by cpts
+    # SUBSET DATA BY CPTS
     sub_dat = dat[dat['cpt'].isin(sub_cpts)].reset_index(drop=False)
 
     # GET TRAIN YEARS
@@ -73,33 +72,30 @@ for ii, vv in enumerate(cn_Y):
     tmp_years = tmp_ii[tmp_ii.n == 0].operyr.values
     tmp_years = tmp_years.astype(int)
 
-    # get index for years without outcome -1
+    # GET INDEX FOR W/OUT -1 OUTCOME
     idx_years = dat.operyr.isin(tmp_years)
 
     # TRAIN AND TEST DATA
     dat_x = dat.loc[idx_years, cn_X].reset_index(drop=True)
     dat_y = dat.loc[idx_years, [vv]].reset_index(drop=True)
 
-    # store cpts
+    # STORE CPTS
     tmp_cpt = dat_x.cpt.unique()
 
-    # remove cpt
+    # REMOVE CPTS
     del dat_x['cpt']
 
-    # normalize data
-    x = dat_x.values  # returns a numpy array
+    # NORMALIZE DATA
+    x = dat_x.values
     min_max_scaler = preprocessing.MinMaxScaler()
     x_scaled = min_max_scaler.fit_transform(x)
     dat_x = pd.DataFrame(x_scaled)
 
-
+    # RUN MODEL AND STORE COEFFICIENTS AND P VALUES
     sm_model = sm.Logit(dat_y.values.ravel(), sm.add_constant(dat_x), max_iter=3000).fit(disp=0,method='bfgs')
     p_vals = sm_model.pvalues
     coef = sm_model.params
-    # find a way to concat the p vals and coefficients, subset by sig later after adding outcome
     outcome_coef.append(pd.DataFrame({'coef': list(coef), 'p_val': list(p_vals), 'outcome':vv}))
-    # remove NA and subset by p_vals less than or equal to 0.05
-
 
 # SAVE CPT AUC FOR AGGREGATE MODEL
 agg_coef = pd.concat(outcome_coef)
@@ -108,10 +104,7 @@ agg_coef.to_csv(os.path.join(dir_output, 'agg_coef.csv'), index=False)
 ####################################################
 # ---- STEP 3: LEAVE-ONE-YEAR - SUB MODEL AUC FOR QUINTILE BINS AND CPT---- #
 
-# LIST FOR BIN AUC AND CPT (WITHIN BIN) AUC FOR SUB MODELS
-
 outcome_bin_coef = []
-#temp = pd.DataFrame(dat.groupby('cpt')[vv].apply(np.sum).reset_index().rename(columns={vv: 'outcome_mean'}))
 
 for ii, vv in enumerate(cn_Y):
     print('##### ------- Outcome %s (%i of %i) -------- #####' % (vv, ii + 1, len(cn_Y)))
@@ -137,7 +130,7 @@ for ii, vv in enumerate(cn_Y):
     tmp_years = tmp_ii[tmp_ii.n == 0].operyr.values
     tmp_years = tmp_years.astype(int)
 
-    # get index for years without outcome -1
+    # GET INDEX FOR YEARS WITHOUT -1 OUTCOME
     idx_years = dat.operyr.isin(tmp_years)
 
     # TRAIN AND TEST DATA
@@ -170,23 +163,20 @@ for ii, vv in enumerate(cn_Y):
             for col in bin_x.columns:
                 if len(bin_x[col].unique()) == 1:
                     bin_x.drop(col, inplace=True, axis=1)
-
+            # NORMALIZE DATA
             x = bin_x.values  # returns a numpy array
             min_max_scaler = preprocessing.MinMaxScaler()
             x_scaled = min_max_scaler.fit_transform(x)
             bin_x = pd.DataFrame(x_scaled)
 
+            # RUN MODEL AND STORE COEFFICIENTS AND P VALUES
             sm_model_bin = sm.Logit(bin_y.values.ravel(), sm.add_constant(bin_x), max_iter=2000).fit(disp=0,method ='bfgs')
-
             p_vals_bin = sm_model_bin.pvalues
             coef_bin = sm_model_bin.params
-
             bin_coef_holder.append(pd.DataFrame({'coef': list(coef_bin), 'p_val': list(p_vals_bin), 'bin':bb, 'outcome': vv}))
 
     outcome_bin_coef.append(pd.concat(bin_coef_holder).assign(outcome=vv))
 
-
 # save data
 agg_coef_bin = pd.concat(outcome_bin_coef).reset_index(drop=True)
 agg_coef_bin.to_csv(os.path.join(dir_output, 'sub_coef.csv'), index=False)
-
