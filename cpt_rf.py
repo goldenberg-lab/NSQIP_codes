@@ -4,13 +4,11 @@ import os
 from support.support_funs import stopifnot
 from support.naive_bayes import mbatch_NB
 from sklearn import metrics
-from sklearn.linear_model import LinearRegression, LogisticRegression
 import seaborn as sns
+from sklearn.ensemble import RandomForestClassifier
 from sklearn import preprocessing
 from support.support_funs import stopifnot
 from support.mdl_funs import normalize, idx_iter
-from scipy.stats import sem
-from sklearn.metrics import roc_auc_score
 
 ###############################
 # ---- STEP 1: LOAD DATA ---- #
@@ -50,12 +48,12 @@ cn_Y = list(dat_Y.columns[25:37])
 dat_Y.drop(dat_Y.columns[[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]],
            axis=1, inplace=True)
 
-
 ###############################################
 # ---- STEP 2: LEAVE-ONE-YEAR - ALL VARIABLES  ---- #
 
 # START LOOP
 holder_y_all = []
+
 for ii, vv in enumerate(cn_Y):
     print('##### ------- Outcome %s (%i of %i) -------- #####' % (vv, ii + 1, len(cn_Y)))
     tmp_ii = pd.concat([dat_Y.operyr, dat_Y[vv] == -1], axis=1)
@@ -82,48 +80,31 @@ for ii, vv in enumerate(cn_Y):
         del Xtest['cpt']
 
         # TRAIN MODEL
-        logisticreg = LogisticRegression(solver='liblinear', max_iter=200)
-        logit_fit = logisticreg.fit(Xtrain, ytrain.values.ravel())
+        clf = RandomForestClassifier(n_estimators=100)
+        rf_mod = clf.fit(Xtrain, ytrain.values.ravel())
+        rf_preds = rf_mod.predict_proba(Xtest)[:,1]
 
-        # PREDICT
-        logit_preds = logit_fit.predict_proba(Xtest)[:, 1]
 
         # STORE RESULTS FROM AGGREGATE MODEL
-        tmp_holder = pd.DataFrame({'y_preds': list(logit_preds), 'y_values': list(ytest.values.ravel()), 'cpt': list(tmp_cpt)})
+        tmp_holder = pd.DataFrame({'y_preds': list(rf_preds), 'y_values': list(ytest.values), 'cpt': list(tmp_cpt)})
         within_holder = []
         # LOOP THROUGH EACH CPT CODE
         for cc in top_cpts:
             #print('cpt %s' % (cc))
             sub_tmp_holder = tmp_holder[tmp_holder['cpt'] == cc].reset_index(drop=True)
-            # get y values and y preds
-            y_pred = sub_tmp_holder.y_preds.values
-            y_true = sub_tmp_holder.y_values.values.ravel()
-
-            # bootstraps
-            n_bootstraps = 1000
-            rng_seed = 42  # control reproducibility
-            bootstrapped_scores = []
-
-            rng = np.random.RandomState(rng_seed)
-            for i in range(n_bootstraps):
-                # bootstrap by sampling with replacement on the prediction indices
-                indices = rng.randint(0, len(y_pred), len(y_pred))
-                if len(np.unique(y_true[indices])) < 2:
-                    # We need at least one positive and one negative sample for ROC AUC
-                    # to be defined: reject the sample
-                    continue
-
-                score = roc_auc_score(y_true[indices], y_pred[indices])
-                bootstrapped_scores.append(score)
-                #print("Bootstrap #{} ROC area: {:0.3f}".format(i + 1, score))
-
-            within_holder.append(pd.DataFrame({'boot_aucs': list(bootstrapped_scores), 'cpt': cc}))
+            if all(sub_tmp_holder.y_values.values == 0):
+                within_holder.append(pd.DataFrame({'auc': 'NA',
+                                                   'cpt': cc}, index=[0]))
+            else:
+                within_holder.append(pd.DataFrame({'auc': metrics.roc_auc_score(list(sub_tmp_holder.y_values.values),
+                                                                                list(sub_tmp_holder.y_preds.values)),
+                                                   'cpt': cc}, index=[0]))
 
         holder_y.append(pd.concat(within_holder).assign(test_year=yy))
     holder_y_all.append(pd.concat(holder_y).assign(outcome=vv))
 
 res_y_all = pd.concat(holder_y_all).reset_index(drop=True)
-res_y_all.to_csv(os.path.join(dir_output, 'logit_boot_agg.csv'), index=False)
+res_y_all.to_csv(os.path.join(dir_output, 'rf_agg.csv'), index=False)
 
 ####################################################
 # ---- STEP 3: LEAVE-ONE-YEAR - ALL VARIABLES, FOR EACH CPT CODE, SUB MODELS---- #
@@ -165,41 +146,27 @@ for ii, vv in enumerate(cn_Y):
 
             # FILL RESULTS WITH NA IF TRAIN OR TEST OUTCOMES ARE ALL ONE VALUE
             if all(np.unique(sub_ytrain.values) == 0) or all(np.unique(sub_ytest.values) == 0):
-                within_holder.append(pd.DataFrame({'boot_aucs': list('0'), 'cpt': cc}))
-
+                within_holder.append(pd.DataFrame({'auc': 'NA',
+                                                   'cpt': cc}, index=[0]))
             else:
                 # TRAIN MODEL
-                logisticreg = LogisticRegression(solver='liblinear', max_iter=200)
-                logit_fit = logisticreg.fit(sub_xtrain, sub_ytrain.values.ravel())
+
+                clf = RandomForestClassifier(n_estimators=100)
+                rf_mod = clf.fit(sub_xtrain, sub_ytrain.values.ravel())
+                #logisticreg = LogisticRegression(solver='liblinear', max_iter=200)
+                #logit_fit = logisticreg.fit(sub_xtrain, sub_ytrain.values.ravel())
 
                 # TEST MODEL
-                logit_preds = logit_fit.predict_proba(sub_xtest)[:, 1]
+                #logit_preds = logit_fit.predict_proba(sub_xtest)[:, 1]
+                rf_preds = rf_mod.predict_proba(sub_xtest)[:, 1]
 
-                # bootstraps
-                n_bootstraps = 1000
-                rng_seed = 42  # control reproducibility
-                bootstrapped_scores = []
-                y_true = sub_ytest.values.ravel()
-                y_pred = logit_preds
-                rng = np.random.RandomState(rng_seed)
-                for i in range(n_bootstraps):
-                    # bootstrap by sampling with replacement on the prediction indices
-                    indices = rng.randint(0, len(y_pred), len(y_pred))
-                    if len(np.unique(y_true[indices])) < 2:
-                        # We need at least one positive and one negative sample for ROC AUC
-                        # to be defined: reject the sample
-                        continue
 
-                    score = roc_auc_score(y_true[indices], y_pred[indices])
-                    bootstrapped_scores.append(score)
-                    # print("Bootstrap #{} ROC area: {:0.3f}".format(i + 1, score))
-
-                within_holder.append(pd.DataFrame({'boot_aucs': list(bootstrapped_scores), 'cpt': cc}))
-
+                within_holder.append(
+                    pd.DataFrame({'auc': metrics.roc_auc_score(sub_ytest.values, rf_preds), 'cpt': cc}, index=[0]))
 
         holder_y.append(pd.concat(within_holder).assign(test_year=yy))
     holder_y_all.append(pd.concat(holder_y).assign(outcome=vv))
 
 res_y_all = pd.concat(holder_y_all).reset_index(drop=True)
-res_y_all.to_csv(os.path.join(dir_output, 'logit_boot_sub.csv'), index=False)
+res_y_all.to_csv(os.path.join(dir_output, 'rf_sub.csv'), index=False)
 

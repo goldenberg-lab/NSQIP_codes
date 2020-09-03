@@ -1,6 +1,8 @@
 import numpy as np
 import pandas as pd
 import os
+from sklearn.ensemble import RandomForestClassifier
+
 from support.support_funs import stopifnot
 from support.naive_bayes import mbatch_NB
 from sklearn import metrics
@@ -82,14 +84,12 @@ for ii, vv in enumerate(cn_Y):
         del Xtest['cpt']
 
         # TRAIN MODEL
-        logisticreg = LogisticRegression(solver='liblinear', max_iter=200)
-        logit_fit = logisticreg.fit(Xtrain, ytrain.values.ravel())
-
-        # PREDICT
-        logit_preds = logit_fit.predict_proba(Xtest)[:, 1]
+        clf = RandomForestClassifier(n_estimators=100)
+        rf_mod = clf.fit(Xtrain, ytrain.values.ravel())
+        rf_preds = rf_mod.predict_proba(Xtest)[:, 1]
 
         # STORE RESULTS FROM AGGREGATE MODEL
-        tmp_holder = pd.DataFrame({'y_preds': list(logit_preds), 'y_values': list(ytest.values.ravel()), 'cpt': list(tmp_cpt)})
+        tmp_holder = pd.DataFrame({'y_preds': list(rf_preds), 'y_values': list(ytest.values.ravel()), 'cpt': list(tmp_cpt)})
         within_holder = []
         # LOOP THROUGH EACH CPT CODE
         for cc in top_cpts:
@@ -123,7 +123,7 @@ for ii, vv in enumerate(cn_Y):
     holder_y_all.append(pd.concat(holder_y).assign(outcome=vv))
 
 res_y_all = pd.concat(holder_y_all).reset_index(drop=True)
-res_y_all.to_csv(os.path.join(dir_output, 'logit_boot_agg.csv'), index=False)
+res_y_all.to_csv(os.path.join(dir_output, 'rf_boot_agg.csv'), index=False)
 
 ####################################################
 # ---- STEP 3: LEAVE-ONE-YEAR - ALL VARIABLES, FOR EACH CPT CODE, SUB MODELS---- #
@@ -168,19 +168,18 @@ for ii, vv in enumerate(cn_Y):
                 within_holder.append(pd.DataFrame({'boot_aucs': list('0'), 'cpt': cc}))
 
             else:
-                # TRAIN MODEL
-                logisticreg = LogisticRegression(solver='liblinear', max_iter=200)
-                logit_fit = logisticreg.fit(sub_xtrain, sub_ytrain.values.ravel())
 
-                # TEST MODEL
-                logit_preds = logit_fit.predict_proba(sub_xtest)[:, 1]
+                clf = RandomForestClassifier(n_estimators=100)
+                rf_mod = clf.fit(sub_xtrain, sub_ytrain.values.ravel())
+
+                rf_preds = rf_mod.predict_proba(sub_xtest)[:, 1]
 
                 # bootstraps
                 n_bootstraps = 1000
                 rng_seed = 42  # control reproducibility
                 bootstrapped_scores = []
                 y_true = sub_ytest.values.ravel()
-                y_pred = logit_preds
+                y_pred = rf_preds
                 rng = np.random.RandomState(rng_seed)
                 for i in range(n_bootstraps):
                     # bootstrap by sampling with replacement on the prediction indices
@@ -201,5 +200,5 @@ for ii, vv in enumerate(cn_Y):
     holder_y_all.append(pd.concat(holder_y).assign(outcome=vv))
 
 res_y_all = pd.concat(holder_y_all).reset_index(drop=True)
-res_y_all.to_csv(os.path.join(dir_output, 'logit_boot_sub.csv'), index=False)
+res_y_all.to_csv(os.path.join(dir_output, 'rf_boot_sub.csv'), index=False)
 

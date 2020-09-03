@@ -4,6 +4,7 @@ import os
 from support.support_funs import stopifnot
 from support.naive_bayes import mbatch_NB
 from sklearn import metrics
+import xgboost as xgb
 
 import seaborn as sns
 
