@@ -122,8 +122,8 @@ for ii, vv in enumerate(cn_Y):
         holder_y.append(pd.concat(within_holder).assign(test_year=yy))
     holder_y_all.append(pd.concat(holder_y).assign(outcome=vv))
 
-res_y_all = pd.concat(holder_y_all).reset_index(drop=True)
-res_y_all.to_csv(os.path.join(dir_output, 'logit_boot_agg.csv'), index=False)
+auc_agg = pd.concat(holder_y_all).reset_index(drop=True)
+auc_agg.to_csv(os.path.join(dir_output, 'logit_boot_agg.csv'), index=False)
 
 ####################################################
 # ---- STEP 3: LEAVE-ONE-YEAR - ALL VARIABLES, FOR EACH CPT CODE, SUB MODELS---- #
@@ -200,6 +200,60 @@ for ii, vv in enumerate(cn_Y):
         holder_y.append(pd.concat(within_holder).assign(test_year=yy))
     holder_y_all.append(pd.concat(holder_y).assign(outcome=vv))
 
-res_y_all = pd.concat(holder_y_all).reset_index(drop=True)
-res_y_all.to_csv(os.path.join(dir_output, 'logit_boot_sub.csv'), index=False)
+auc_sub = pd.concat(holder_y_all).reset_index(drop=True)
+auc_sub.to_csv(os.path.join(dir_output, 'logit_boot_sub.csv'), index=False)
+
+# ---------------------------- bootstrap analysis
+# compare aggregate and sub model auc
+auc_agg = pd.read_csv(os.path.join(dir_output, 'logit_boot_agg.csv'))
+auc_sub = pd.read_csv(os.path.join(dir_output, 'logit_boot_sub.csv'))
+
+# remove if auc is 0
+auc_agg = auc_agg[auc_agg['boot_aucs']!=0]
+auc_sub = auc_sub[auc_sub['boot_aucs']!=0]
+
+auc_agg = auc_agg.rename(columns = {'boot_aucs': 'agg_boot_aucs'}, inplace = False)
+auc_sub = auc_sub.rename(columns = {'boot_aucs': 'sub_boot_aucs'}, inplace = False)
+
+
+# get list of shared cpts
+#year_list = list(auc_agg.test_year.unique())
+outcome_list = list(auc_agg.outcome.unique())
+num_boots = 1000
+
+outcome_results = []
+for i in outcome_list:
+    print(i)
+    temp_agg = auc_agg[auc_agg['outcome'] == i].reset_index(drop=True)
+    temp_sub = auc_sub[auc_sub['outcome'] == i].reset_index(drop=True)
+    year_list =np.intersect1d(temp_agg.test_year.unique(), temp_agg.test_year.unique())
+    year_results = []
+    for j in year_list:
+        print(j)
+        year_agg = temp_agg[temp_agg['test_year'] == j].reset_index(drop=True)
+        year_sub = temp_sub[temp_sub['test_year'] == j].reset_index(drop=True)
+        cpt_list = np.intersect1d(year_agg.cpt.unique(), year_sub.cpt.unique())
+        cpt_results = []
+        for k in cpt_list:
+            cpt_agg = year_agg[year_agg['cpt'] == k].reset_index(drop=True)
+            cpt_sub = year_sub[year_sub['cpt'] == k].reset_index(drop=True)
+            if cpt_sub.shape[0] == 0 or cpt_agg.shape[0] == 0:
+                cpt_results.append(pd.DataFrame(
+                    {'sig_value': 'NA', 'agg_p_value': 'NA', 'diff_p_value': 'NA', 'cpt': 'NA'},index=[0]))
+            else:
+                temp = pd.merge(cpt_agg, cpt_sub, left_index=True, right_index=True)
+                temp = temp[['sub_boot_aucs', 'agg_boot_aucs']]
+                temp['auc_diff'] = temp.sub_boot_aucs.values - temp.agg_boot_aucs.values
+                # get 0.025 percentile
+                sig_value = temp.auc_diff.quantile(0.025)
+                agg_p_value = 1 - (((temp['agg_boot_aucs'] > 0.5).sum())/num_boots)
+                diff_p_value = 1 - (((temp['auc_diff'] > 0).sum())/num_boots)
+                cpt_results.append(pd.DataFrame({'sig_value': sig_value, 'agg_p_value': agg_p_value, 'diff_p_value':diff_p_value ,'cpt':k}, index=[0]))
+        year_results.append(pd.concat(cpt_results).assign(test_year=j))
+    outcome_results.append(pd.concat(year_results).assign(outcome=i))
+
+sig_cpts = pd.concat(outcome_results).reset_index(drop=True)
+sig_cpts = sig_cpts[sig_cpts['sig_value'] >0]it
+sig_cpts.to_csv(os.path.join(dir_output, 'logit_sig_cpts.csv'), index=False)
+
 
