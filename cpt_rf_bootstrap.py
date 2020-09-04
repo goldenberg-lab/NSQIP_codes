@@ -221,6 +221,7 @@ auc_sub = auc_sub.rename(columns = {'boot_aucs': 'sub_boot_aucs'}, inplace = Fal
 outcome_list = list(auc_agg.outcome.unique())
 num_boots = 1000
 
+
 outcome_results = []
 for i in outcome_list:
     print(i)
@@ -244,17 +245,41 @@ for i in outcome_list:
                 temp = pd.merge(cpt_agg, cpt_sub, left_index=True, right_index=True)
                 temp = temp[['sub_boot_aucs', 'agg_boot_aucs']]
                 temp['auc_diff'] = temp.sub_boot_aucs.values - temp.agg_boot_aucs.values
+                temp['agg_diff'] = temp.agg_boot_aucs.values - 0.5
                 # get 0.025 percentile
                 sig_value = temp.auc_diff.quantile(0.025)
-                agg_p_value = 1 - (temp[temp['agg_boot_aucs'] > 0.5].shape[0] + 1) / num_boots
-                diff_p_value = 1 - (temp[temp['auc_diff'] > 0].shape[0] + 1) / num_boots
-                cpt_results.append(pd.DataFrame({'sig_value': sig_value, 'agg_p_value': agg_p_value, 'diff_p_value':diff_p_value ,'cpt':k}, index=[0]))
+                sig_value_agg = temp.agg_diff.quantile(0.025)
+                agg_p_value = 1 - ((temp[temp['agg_boot_aucs'] > 0.5].shape[0])) / (temp.shape[0] + 1)
+                diff_p_value = 1 - (temp[temp['auc_diff'] > 0].shape[0]) / (temp.shape[0] + 1)
+                cpt_results.append(pd.DataFrame(
+                    {'sig_value_diff': sig_value, 'sig_value_agg':sig_value_agg, 'agg_p_value': agg_p_value, 'diff_p_value': diff_p_value, 'cpt': k},
+                    index=[0]))
         year_results.append(pd.concat(cpt_results).assign(test_year=j))
     outcome_results.append(pd.concat(year_results).assign(outcome=i))
 
 sig_cpts = pd.concat(outcome_results).reset_index(drop=True)
-sig_cpts = sig_cpts[sig_cpts['sig_value']>0].reset_index(drop=True)
+
+import statsmodels.stats.multitest as smm
+
+# loop through outcome and year to get adjusted pvalues
+outcome_results = []
+for i in outcome_list:
+    print(i)
+    temp_sig = sig_cpts[sig_cpts['outcome'] == i].reset_index(drop=True)
+
+    year_list = temp_sig.test_year.unique()
+    year_results = []
+    for j in year_list:
+        print(j)
+        year_sig = temp_sig[temp_sig['test_year'] == j].reset_index(drop=True)
+        year_sig['agg_p_value_adj'] = smm.fdrcorrection(year_sig.agg_p_value.values)[1]
+        year_sig['diff_p_value_adj'] = smm.fdrcorrection(year_sig.diff_p_value.values)[1]
+        year_results.append(year_sig)
+
+    outcome_results.append(pd.concat(year_results))
+
+sig_cpts = pd.concat(outcome_results).reset_index(drop=True)
+
+sig_cpts = sig_cpts[sig_cpts['sig_value_diff'] >0]
+sig_cpts = sig_cpts[sig_cpts['sig_value_agg']>0]
 sig_cpts.to_csv(os.path.join(dir_output, 'rf_sig_cpts.csv'), index=False)
-
-
-
