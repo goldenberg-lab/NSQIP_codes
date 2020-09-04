@@ -205,8 +205,8 @@ auc_sub.to_csv(os.path.join(dir_output, 'rf_boot_sub.csv'), index=False)
 
 # ---------------------------- bootstrap analysis
 # compare aggregate and sub model auc
-#auc_agg = pd.read_csv(os.path.join(dir_output, 'rf_boot_agg.csv'))
-#auc_sub = pd.read_csv(os.path.join(dir_output, 'rf_boot_sub.csv'))
+auc_agg = pd.read_csv(os.path.join(dir_output, 'rf_boot_agg.csv'))
+auc_sub = pd.read_csv(os.path.join(dir_output, 'rf_boot_sub.csv'))
 
 # remove if auc is 0
 auc_agg = auc_agg[auc_agg['boot_aucs']!=0]
@@ -246,8 +246,8 @@ for i in outcome_list:
                 temp['auc_diff'] = temp.sub_boot_aucs.values - temp.agg_boot_aucs.values
                 # get 0.025 percentile
                 sig_value = temp.auc_diff.quantile(0.025)
-                agg_p_value = 1 - (((temp['agg_boot_aucs'] > 0.5).sum())/num_boots)
-                diff_p_value = 1 - (((temp['auc_diff'] > 0).sum())/num_boots)
+                agg_p_value = 1 - (temp[temp['agg_boot_aucs'] > 0.5].shape[0] + 1) / num_boots
+                diff_p_value = 1 - (temp[temp['auc_diff'] > 0].shape[0] + 1) / num_boots
                 cpt_results.append(pd.DataFrame({'sig_value': sig_value, 'agg_p_value': agg_p_value, 'diff_p_value':diff_p_value ,'cpt':k}, index=[0]))
         year_results.append(pd.concat(cpt_results).assign(test_year=j))
     outcome_results.append(pd.concat(year_results).assign(outcome=i))

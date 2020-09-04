@@ -99,7 +99,7 @@ for ii, vv in enumerate(cn_Y):
 
 # SAVE CPT AUC FOR AGGREGATE MODEL
 agg_coef = pd.concat(outcome_coef)
-agg_coef.to_csv(os.path.join(dir_output, 'agg_coef.csv'), index=False)
+agg_coef.to_csv(os.path.join(dir_output, 'logit_agg_coef_all_years.csv'), index=False)
 
 ####################################################
 # ---- STEP 3: LEAVE-ONE-YEAR - SUB MODEL AUC FOR QUINTILE BINS AND CPT---- #
@@ -179,4 +179,4 @@ for ii, vv in enumerate(cn_Y):
 
 # save data
 agg_coef_bin = pd.concat(outcome_bin_coef).reset_index(drop=True)
-agg_coef_bin.to_csv(os.path.join(dir_output, 'sub_coef.csv'), index=False)
+agg_coef_bin.to_csv(os.path.join(dir_output, 'logit_sub_coef_all_years.csv'), index=False)

@@ -165,11 +165,11 @@ for ii, vv in enumerate(cn_Y):
 
 # SAVE CPT AUC FOR AGGREGATE MODEL
 agg_auc_cpt = pd.concat(outcome_cpt).reset_index(drop=True)
-agg_auc_cpt.to_csv(os.path.join(dir_output, 'logit_auc_agg_quin_cpt.csv'), index=False)
+agg_auc_cpt.to_csv(os.path.join(dir_output, 'logit_agg_quin_cpt.csv'), index=False)
 
 # SAVE QUINTILE AUC FOR AGGREGATE MODEL
 agg_auc_bin = pd.concat(outcome_bin).reset_index(drop=True)
-agg_auc_bin.to_csv(os.path.join(dir_output, 'logit_auc_agg_quin_bin.csv'), index=False)
+agg_auc_bin.to_csv(os.path.join(dir_output, 'logit_agg_quin_bin.csv'), index=False)
 
 # SAVE coefficients for agg model
 agg_coef = pd.concat(outcome_coef).reset_index(drop=True)

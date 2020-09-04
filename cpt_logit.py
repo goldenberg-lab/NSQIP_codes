@@ -100,7 +100,7 @@ for ii, vv in enumerate(cn_Y):
     holder_y_all.append(pd.concat(holder_y).assign(outcome=vv))
 
 res_y_all = pd.concat(holder_y_all).reset_index(drop=True)
-res_y_all.to_csv(os.path.join(dir_output, 'logit_auc_all_cpt_within.csv'), index=False)
+res_y_all.to_csv(os.path.join(dir_output, 'logit_agg.csv'), index=False)
 
 ####################################################
 # ---- STEP 3: LEAVE-ONE-YEAR - ALL VARIABLES, FOR EACH CPT CODE, SUB MODELS---- #
@@ -159,7 +159,7 @@ for ii, vv in enumerate(cn_Y):
     holder_y_all.append(pd.concat(holder_y).assign(outcome=vv))
 
 res_y_all = pd.concat(holder_y_all).reset_index(drop=True)
-res_y_all.to_csv(os.path.join(dir_output, 'logit_auc_each_cpt_within.csv'), index=False)
+res_y_all.to_csv(os.path.join(dir_output, 'logit_sub.csv'), index=False)
 
 ###############################################
 # ---- STEP 4: LEAVE-ONE-YEAR - ALL VARIABLES (RISK SCORE INSTEAD OF CPT SCORE) ---- #
@@ -248,7 +248,7 @@ for ii, vv in enumerate(cn_Y):
     holder_y_all.append(pd.concat(holder_y).assign(outcome=vv))
 
 res_y_all = pd.concat(holder_y_all).reset_index(drop=True)
-res_y_all.to_csv(os.path.join(dir_output, 'logit_auc_all_cpt_within_phat.csv'), index=False)
+res_y_all.to_csv(os.path.join(dir_output, 'logit_agg_phat.csv'), index=False)
 
 ###############################################
 # ---- STEP 5: LEAVE-ONE-YEAR - ALL VARIABLES (RISK SCORE INSTEAD OF CPT SCORE, SUB MODELS) ---- #
@@ -312,6 +312,7 @@ for ii, vv in enumerate(cn_Y):
                 logisticreg = LogisticRegression(solver='liblinear', max_iter=200)
                 logit_fit = logisticreg.fit(sub_xtrain, sub_ytrain.values.ravel())
 
+
                 # TEST MODEL
                 logit_preds = logit_fit.predict_proba(sub_xtest)[:, 1]
 
@@ -321,4 +322,4 @@ for ii, vv in enumerate(cn_Y):
     holder_y_all.append(pd.concat(holder_y).assign(outcome=vv))
 
 res_y_all = pd.concat(holder_y_all).reset_index(drop=True)
-res_y_all.to_csv(os.path.join(dir_output, 'logit_auc_each_cpt_within_phat.csv'), index=False)
+res_y_all.to_csv(os.path.join(dir_output, 'logit_sub_phat.csv'), index=False)
