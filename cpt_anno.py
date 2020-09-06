@@ -186,5 +186,5 @@ for ii, vv in enumerate(cn_Y):
     holder_y_all.append(pd.concat(holder_y).assign(outcome=vv))
 
 res_y_all = pd.concat(holder_y_all).reset_index(drop=True)
-res_y_all.to_csv(os.path.join(dir_output, 'sub_auc_cpt_title.csv'), index=False)
+res_y_all.to_csv(os.path.join(dir_output, 'sub_cpt_titlecsv'), index=False)
 
