@@ -1,14 +1,14 @@
 import numpy as np
 import pandas as pd
 import os
-from support.support_funs import stopifnot
-from support.naive_bayes import mbatch_NB
 from sklearn import metrics
-from sklearn.linear_model import LinearRegression, LogisticRegression
-import seaborn as sns
-from sklearn import preprocessing
-from support.support_funs import stopifnot
-from support.mdl_funs import normalize, idx_iter
+from sklearn.linear_model import LogisticRegression
+
+# DESCRIPTION: THIS SCRIPT GENERATES AUC SCORES FOR THE AGGREGATE AND SUB MODELS.
+# THE SUBMODELS ARE DEFINED BY THEIR ORGAN GROUP, NOT INDIVIDUAL CPT CODE
+# SAVES TO OUTPUT:
+# --- logit_agg_organ.csv
+# --- logit_sub_organ.csv
 
 ###############################
 # ---- STEP 1: LOAD DATA ---- #
@@ -120,7 +120,7 @@ for ii, vv in enumerate(cn_Y):
     holder_y_all.append(pd.concat(holder_y).assign(outcome=vv))
 
 res_y_all = pd.concat(holder_y_all).reset_index(drop=True)
-res_y_all.to_csv(os.path.join(dir_output, 'agg_auc_cpt_organ.csv'), index=False)
+res_y_all.to_csv(os.path.join(dir_output, 'logit_agg_organ.csv'), index=False)
 
 ####################################################
 # ---- STEP 3: LEAVE-ONE-YEAR - ALL VARIABLES, FOR EACH CPT CODE, SUB MODELS---- #
@@ -185,5 +185,5 @@ for ii, vv in enumerate(cn_Y):
     holder_y_all.append(pd.concat(holder_y).assign(outcome=vv))
 
 res_y_all = pd.concat(holder_y_all).reset_index(drop=True)
-res_y_all.to_csv(os.path.join(dir_output, 'sub_auc_cpt_organ.csv'), index=False)
+res_y_all.to_csv(os.path.join(dir_output, 'logit_sub_organ.csv'), index=False)
 

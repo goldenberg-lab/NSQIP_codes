@@ -1,17 +1,16 @@
 import numpy as np
 import pandas as pd
 import os
-from support.support_funs import stopifnot
-from support.naive_bayes import mbatch_NB
-from sklearn import metrics
-from sklearn.linear_model import LinearRegression, LogisticRegression
-import seaborn as sns
 from sklearn import preprocessing
-from support.support_funs import stopifnot
-from support.mdl_funs import normalize, idx_iter
 import statsmodels.api as sm
-from pandas.core.groupby.groupby import DataError
 
+# DESCRIPTION: THIS SCRIPT GENERATES COEFFICIENT VALUES FOR THE AGGREGATE AND SUB MODELS.
+# THE SUBMODELS ARE DEFINED BY THEIR RISK QUINTILE, NOT INDIVIDUAL CPT CODE
+# THIS SCRIPT DIFFERS FROM CPT_LOGIT_QUINTILES.PY BECUASE IT AGGREGATES OVER ALL YEARS (NO CROSS VALIDATION)
+# AND ONLY SAVES COEFFICIENTS NOT AUC
+# SAVES TO OUTPUT:
+# --- logit_agg_coef_all_years.csv
+# --- logit_sub_coef_all_years.csv
 
 ###############################
 # ---- STEP 1: LOAD DATA ---- #

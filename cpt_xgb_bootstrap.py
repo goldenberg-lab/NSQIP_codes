@@ -1,21 +1,16 @@
 import numpy as np
 import pandas as pd
 import os
-from sklearn.ensemble import RandomForestClassifier
-
-from support.support_funs import stopifnot
-from support.naive_bayes import mbatch_NB
-from sklearn import metrics
-from sklearn.linear_model import LinearRegression, LogisticRegression
-import seaborn as sns
-from sklearn import preprocessing
-from support.support_funs import stopifnot
-from support.mdl_funs import normalize, idx_iter
-from scipy.stats import sem
 from sklearn.metrics import roc_auc_score
 import xgboost as xgb
+import statsmodels.stats.multitest as smm
 
 
+# DESCRIPTION: THIS SCRIPT GENERATES AUC SCORES FOR THE AGGREGATE AND SUB MODELS FROM BOOTSTRAPPED Y VALUES AND PREDICTIONS
+# SAVES TO OUTPUT:
+# --- xgb_boot_agg.csv
+# --- xgb_boot_sub.csv
+# --- xgb_sig_cpts.csv'
 ###############################
 # ---- STEP 1: LOAD DATA ---- #
 dir_base = os.getcwd()
@@ -209,21 +204,20 @@ auc_agg.to_csv(os.path.join(dir_output, 'xgb_boot_sub.csv'), index=False)
 
 # ---------------------------- bootstrap analysis
 # compare aggregate and sub model auc
-auc_agg = pd.read_csv(os.path.join(dir_output, 'xgb_boot_agg.csv'))
-auc_sub = pd.read_csv(os.path.join(dir_output, 'xgb_boot_sub.csv'))
-# remove if auc is 0
+#auc_agg = pd.read_csv(os.path.join(dir_output, 'xgb_boot_agg.csv'))
+#auc_sub = pd.read_csv(os.path.join(dir_output, 'xgb_boot_sub.csv'))
+
+# REMOVE ROWS WITH 0 AS AUC - THIS WAS A PLACEHOLDER FOR CPT CODES WITH NO POSITIVE VALUES
 auc_agg = auc_agg[auc_agg['boot_aucs']!=0]
 auc_sub = auc_sub[auc_sub['boot_aucs']!=0]
 
+# CREATE COLUMN TO IDENTIFY DATA
 auc_agg = auc_agg.rename(columns = {'boot_aucs': 'agg_boot_aucs'}, inplace = False)
 auc_sub = auc_sub.rename(columns = {'boot_aucs': 'sub_boot_aucs'}, inplace = False)
 
-
-# get list of shared cpts
-#year_list = list(auc_agg.test_year.unique())
+# GET LIST OF OUTCOME NAMES TO LOOP THROUGH
 outcome_list = list(auc_agg.outcome.unique())
 num_boots = 1000
-
 outcome_results = []
 for i in outcome_list:
     print(i)
@@ -248,11 +242,12 @@ for i in outcome_list:
                 temp = temp[['sub_boot_aucs', 'agg_boot_aucs']]
                 temp['auc_diff'] = temp.sub_boot_aucs.values - temp.agg_boot_aucs.values
                 temp['agg_diff'] = temp.agg_boot_aucs.values - 0.5
-                # get 0.025 percentile
+                # GET 2.5% VALUE
                 sig_value = temp.auc_diff.quantile(0.025)
                 sig_value_agg = temp.agg_diff.quantile(0.025)
-                agg_p_value = 1 - ((temp[temp['agg_boot_aucs'] > 0.5].shape[0])) / (temp.shape[0] + 1)
-                diff_p_value = 1 - (temp[temp['auc_diff'] > 0].shape[0]) / (temp.shape[0] + 1)
+                # GENERATE PVALUES
+                agg_p_value = 1 - ((temp[temp['agg_boot_aucs'] > 0.5].shape[0]))/(temp.shape[0] +1)
+                diff_p_value = 1 - (temp[temp['auc_diff'] > 0].shape[0]) / (temp.shape[0] +1)
                 cpt_results.append(pd.DataFrame(
                     {'sig_value_diff': sig_value, 'sig_value_agg':sig_value_agg, 'agg_p_value': agg_p_value, 'diff_p_value': diff_p_value, 'cpt': k},
                     index=[0]))
@@ -261,14 +256,12 @@ for i in outcome_list:
 
 sig_cpts = pd.concat(outcome_results).reset_index(drop=True)
 
-import statsmodels.stats.multitest as smm
 
-# loop through outcome and year to get adjusted pvalues
+# LOOP THROUGH OUTCOME AND YEAR AND GET FDR CORRECT PVALUES
 outcome_results = []
 for i in outcome_list:
     print(i)
     temp_sig = sig_cpts[sig_cpts['outcome'] == i].reset_index(drop=True)
-
     year_list = temp_sig.test_year.unique()
     year_results = []
     for j in year_list:

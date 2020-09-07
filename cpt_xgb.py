@@ -1,17 +1,13 @@
 import numpy as np
 import pandas as pd
 import os
-from support.support_funs import stopifnot
-from support.naive_bayes import mbatch_NB
 from sklearn import metrics
-import seaborn as sns
-from sklearn.ensemble import RandomForestClassifier
-from sklearn import svm
 import xgboost as xgb
-from sklearn import preprocessing
-from support.support_funs import stopifnot
-from support.mdl_funs import normalize, idx_iter
 
+# DESCRIPTION: THIS SCRIPT GENERATES AUC SCORES FOR THE AGGREGATE AND SUB MODELS.
+# SAVES TO OUTPUT:
+# --- xgb_agg.csv
+# --- xgb_sub.csv
 ###############################
 # ---- STEP 1: LOAD DATA ---- #
 dir_base = os.getcwd()
@@ -50,9 +46,6 @@ cn_Y = list(dat_Y.columns[25:37])
 dat_Y.drop(dat_Y.columns[[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]],
            axis=1, inplace=True)
 
-#So if they take too long don't worry about it. Only other model I'd do is boosting (XGBoost with SKLearn is quite fast).
-# In addition to the agg/sub comparisons, can you also see whether the significant y/cpt sub-models are different between the models?
-
 ###############################################
 # ---- STEP 2: LEAVE-ONE-YEAR - ALL VARIABLES  ---- #
 
@@ -72,28 +65,25 @@ for ii, vv in enumerate(cn_Y):
         print('Train Year %i' % (yy))
         idx_train = dat_X.operyr.isin(tmp_years) & (dat_X.operyr < yy)
         idx_test = dat_X.operyr.isin(tmp_years) & (dat_X.operyr == yy)
-        # get dummies
         Xtrain, Xtest = dat_X.loc[idx_train, cn_X].reset_index(drop=True), \
                         dat_X.loc[idx_test, cn_X].reset_index(drop=True)
         ytrain, ytest = dat_Y.loc[idx_train, [vv]].reset_index(drop=True), \
                         dat_Y.loc[idx_test, [vv]].reset_index(drop=True)
 
-        # store cpt code
+        # STORE CPT CODE AND DELETE FROM DATA
         tmp_cpt = Xtest.cpt
-        # remove cpt code
         del Xtrain['cpt']
         del Xtest['cpt']
+
+        # TRAIN AND GET PREDICTIONS
         xgb_mod = xgb.XGBClassifier()
-
         xgb_mod.fit(Xtrain, ytrain.values.ravel())
-
         xgb_preds = xgb_mod.predict_proba(Xtest)[:,1]
-
-
 
         # STORE RESULTS FROM AGGREGATE MODEL
         tmp_holder = pd.DataFrame({'y_preds': list(xgb_preds), 'y_values': list(ytest.values), 'cpt': list(tmp_cpt)})
         within_holder = []
+
         # LOOP THROUGH EACH CPT CODE
         for cc in top_cpts:
             #print('cpt %s' % (cc))
@@ -129,7 +119,6 @@ for ii, vv in enumerate(cn_Y):
         print('Train Year %i' % (yy))
         idx_train = dat_X.operyr.isin(tmp_years) & (dat_X.operyr < yy)
         idx_test = dat_X.operyr.isin(tmp_years) & (dat_X.operyr == yy)
-        # get dummies
         Xtrain, Xtest = dat_X.loc[idx_train, cn_X].reset_index(drop=True), \
                         dat_X.loc[idx_test, cn_X].reset_index(drop=True)
         ytrain, ytest = dat_Y.loc[idx_train, [vv]].reset_index(drop=True), \
@@ -146,7 +135,7 @@ for ii, vv in enumerate(cn_Y):
             sub_ytrain = ytrain[ytrain.index.isin(sub_xtrain.index)]
             sub_ytest = ytest[ytest.index.isin(sub_xtest.index)]
 
-            # remove cpt column
+            # REMOVE CPT COLUMN
             del sub_xtrain['cpt']
             del sub_xtest['cpt']
 
@@ -155,13 +144,10 @@ for ii, vv in enumerate(cn_Y):
                 within_holder.append(pd.DataFrame({'auc': 'NA',
                                                    'cpt': cc}, index=[0]))
             else:
-                # TRAIN MODEL
+                # TRAIN MODEL AND GET PREDICTIONS
                 xgb_mod = xgb.XGBClassifier()
-
                 xgb_mod.fit(sub_xtrain, sub_ytrain.values.ravel())
-
                 xgb_preds = xgb_mod.predict_proba(sub_xtest)[:, 1]
-
 
                 within_holder.append(
                     pd.DataFrame({'auc': metrics.roc_auc_score(sub_ytest.values, xgb_preds), 'cpt': cc}, index=[0]))

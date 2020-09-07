@@ -1,14 +1,19 @@
 import numpy as np
 import pandas as pd
 import os
-from support.support_funs import stopifnot
-from support.naive_bayes import mbatch_NB
 from sklearn import metrics
-from sklearn.linear_model import LinearRegression, LogisticRegression
-import seaborn as sns
-from sklearn import preprocessing
-from support.support_funs import stopifnot
-from support.mdl_funs import normalize, idx_iter
+from sklearn.linear_model import LogisticRegression
+
+# DESCRIPTION: THIS SCRIPT GENERATES AUC SCORES AND COEFFCIENT VALUES FOR THE AGGREGATE AND SUB MODELS.
+# THE SUBMODELS ARE DEFINED BY THEIR RISK QUINTILE, NOT INDIVIDUAL CPT CODE
+# SAVES TO OUTPUT:
+# --- logit_agg_quin_cpt.csv
+# --- logit_agg_quin_bin.csv
+# --- logit_agg_quin_coef.csv
+# --- logit_sub_quin_cpt.csv
+# --- logit_sub_quin_bin.csv
+# --- logit_sub_quin_coef_bin.csv
+# --- logit_sub_quin_coef_cpt.csv
 
 ###############################
 # ---- STEP 1: LOAD DATA ---- #
@@ -18,7 +23,6 @@ dir_figures = os.path.join(dir_base, '..', 'figures')
 
 fn_X = 'X_imputed.csv'
 fn_Y = 'y_agg.csv'
-
 dat_X = pd.read_csv(os.path.join(dir_output, fn_X))
 dat_Y = pd.read_csv(os.path.join(dir_output, fn_Y))
 
@@ -173,7 +177,7 @@ agg_auc_bin.to_csv(os.path.join(dir_output, 'logit_agg_quin_bin.csv'), index=Fal
 
 # SAVE coefficients for agg model
 agg_coef = pd.concat(outcome_coef).reset_index(drop=True)
-agg_coef.to_csv(os.path.join(dir_output, 'logit_agg_coef.csv'), index=False)
+agg_coef.to_csv(os.path.join(dir_output, 'logit_agg_quin_coef.csv'), index=False)
 
 ####################################################
 # ---- STEP 3: LEAVE-ONE-YEAR - SUB MODEL AUC FOR QUINTILE BINS AND CPT---- #
@@ -330,16 +334,17 @@ for ii, vv in enumerate(cn_Y):
     outcome_bin.append(pd.concat(year_bin).assign(outcome=vv))
 
 
+
 # SAVE AUC FOR CPTS ON SUB MODELS
 agg_auc_cpt = pd.concat(outcome_cpt).reset_index(drop=True)
-agg_auc_cpt.to_csv(os.path.join(dir_output, 'logit_auc_sub_quin_cpt.csv'), index=False)
+agg_auc_cpt.to_csv(os.path.join(dir_output, 'logit_sub_quin_cpt.csv'), index=False)
 
 agg_coef_cpt = pd.concat(outcome_cpt_coef).reset_index(drop=True)
-agg_coef_cpt.to_csv(os.path.join(dir_output, 'logit_coef_sub_cpt.csv'), index=False)
+agg_coef_cpt.to_csv(os.path.join(dir_output, 'logit_sub_quin_coef_cpt.csv'), index=False)
 
 # SAVE AUC FOR QUNITILE BINS FOR SUB MODELS
 agg_auc_bin = pd.concat(outcome_bin).reset_index(drop=True)
-agg_auc_bin.to_csv(os.path.join(dir_output, 'logit_auc_sub_quin_bin.csv'), index=False)
+agg_auc_bin.to_csv(os.path.join(dir_output, 'logit_sub_quin_bin.csv'), index=False)
 
 agg_coef_bin = pd.concat(outcome_bin_coef).reset_index(drop=True)
-agg_coef_bin.to_csv(os.path.join(dir_output, 'logit_coef_sub_bin.csv'), index=False)
+agg_coef_bin.to_csv(os.path.join(dir_output, 'logit_sub_quin_coef_bin.csv'), index=False)

@@ -1,16 +1,15 @@
 import numpy as np
 import pandas as pd
 import os
-from support.support_funs import stopifnot
-from support.naive_bayes import mbatch_NB
-from sklearn import metrics
-from sklearn.linear_model import LinearRegression, LogisticRegression
-import seaborn as sns
-from sklearn import preprocessing
-from support.support_funs import stopifnot
-from support.mdl_funs import normalize, idx_iter
-from scipy.stats import sem
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
+import statsmodels.stats.multitest as smm
+
+# DESCRIPTION: THIS SCRIPT GENERATES AUC SCORES FOR THE AGGREGATE AND SUB MODELS FROM BOOTSTRAPPED Y VALUES AND PREDICTIONS
+# SAVES TO OUTPUT:
+# --- logit_boot_agg.csv
+# --- logit_boot_sub.csv
+# --- logit_sig_cpts.csv'
 
 ###############################
 # ---- STEP 1: LOAD DATA ---- #
@@ -69,15 +68,13 @@ for ii, vv in enumerate(cn_Y):
         print('Train Year %i' % (yy))
         idx_train = dat_X.operyr.isin(tmp_years) & (dat_X.operyr < yy)
         idx_test = dat_X.operyr.isin(tmp_years) & (dat_X.operyr == yy)
-        # get dummies
         Xtrain, Xtest = dat_X.loc[idx_train, cn_X].reset_index(drop=True), \
                         dat_X.loc[idx_test, cn_X].reset_index(drop=True)
         ytrain, ytest = dat_Y.loc[idx_train, [vv]].reset_index(drop=True), \
                         dat_Y.loc[idx_test, [vv]].reset_index(drop=True)
 
-        # store cpt code
+        # STORE CPT CODES AND DELETE FROM DATA
         tmp_cpt = Xtest.cpt
-        # remove cpt code
         del Xtrain['cpt']
         del Xtest['cpt']
 
@@ -85,7 +82,7 @@ for ii, vv in enumerate(cn_Y):
         logisticreg = LogisticRegression(solver='liblinear', max_iter=200)
         logit_fit = logisticreg.fit(Xtrain, ytrain.values.ravel())
 
-        # PREDICT
+        # GET PREDICTIONS
         logit_preds = logit_fit.predict_proba(Xtest)[:, 1]
 
         # STORE RESULTS FROM AGGREGATE MODEL
@@ -93,17 +90,15 @@ for ii, vv in enumerate(cn_Y):
         within_holder = []
         # LOOP THROUGH EACH CPT CODE
         for cc in top_cpts:
-            #print('cpt %s' % (cc))
             sub_tmp_holder = tmp_holder[tmp_holder['cpt'] == cc].reset_index(drop=True)
-            # get y values and y preds
+            # GET Y VALUES AND PREDICTIONS FOR BOOTSTRAPPING
             y_pred = sub_tmp_holder.y_preds.values
             y_true = sub_tmp_holder.y_values.values.ravel()
 
-            # bootstraps
+            # 1000 BOOTSTRAPS
             n_bootstraps = 1000
             rng_seed = 42  # control reproducibility
             bootstrapped_scores = []
-
             rng = np.random.RandomState(rng_seed)
             for i in range(n_bootstraps):
                 # bootstrap by sampling with replacement on the prediction indices
@@ -142,7 +137,6 @@ for ii, vv in enumerate(cn_Y):
         print('Train Year %i' % (yy))
         idx_train = dat_X.operyr.isin(tmp_years) & (dat_X.operyr < yy)
         idx_test = dat_X.operyr.isin(tmp_years) & (dat_X.operyr == yy)
-        # get dummies
         Xtrain, Xtest = dat_X.loc[idx_train, cn_X].reset_index(drop=True), \
                         dat_X.loc[idx_test, cn_X].reset_index(drop=True)
         ytrain, ytest = dat_Y.loc[idx_train, [vv]].reset_index(drop=True), \
@@ -159,7 +153,7 @@ for ii, vv in enumerate(cn_Y):
             sub_ytrain = ytrain[ytrain.index.isin(sub_xtrain.index)]
             sub_ytest = ytest[ytest.index.isin(sub_xtest.index)]
 
-            # remove cpt column
+            # DELETE CPT CODE FROM DATA
             del sub_xtrain['cpt']
             del sub_xtest['cpt']
 
@@ -172,10 +166,10 @@ for ii, vv in enumerate(cn_Y):
                 logisticreg = LogisticRegression(solver='liblinear', max_iter=200)
                 logit_fit = logisticreg.fit(sub_xtrain, sub_ytrain.values.ravel())
 
-                # TEST MODEL
+                # GET PREDICTION
                 logit_preds = logit_fit.predict_proba(sub_xtest)[:, 1]
 
-                # bootstraps
+                # 1000 BOOTSTRAPS
                 n_bootstraps = 1000
                 rng_seed = 42  # control reproducibility
                 bootstrapped_scores = []
@@ -205,22 +199,20 @@ auc_sub.to_csv(os.path.join(dir_output, 'logit_boot_sub.csv'), index=False)
 
 # ---------------------------- bootstrap analysis
 # compare aggregate and sub model auc
-auc_agg = pd.read_csv(os.path.join(dir_output, 'logit_boot_agg.csv'))
-auc_sub = pd.read_csv(os.path.join(dir_output, 'logit_boot_sub.csv'))
+#auc_agg = pd.read_csv(os.path.join(dir_output, 'logit_boot_agg.csv'))
+#auc_sub = pd.read_csv(os.path.join(dir_output, 'logit_boot_sub.csv'))
 
-# remove if auc is 0
+# REMOVE ROWS WITH 0 AS AUC - THIS WAS A PLACEHOLDER FOR CPT CODES WITH NO POSITIVE VALUES
 auc_agg = auc_agg[auc_agg['boot_aucs']!=0]
 auc_sub = auc_sub[auc_sub['boot_aucs']!=0]
 
+# CREATE COLUMN TO IDENTIFY DATA
 auc_agg = auc_agg.rename(columns = {'boot_aucs': 'agg_boot_aucs'}, inplace = False)
 auc_sub = auc_sub.rename(columns = {'boot_aucs': 'sub_boot_aucs'}, inplace = False)
 
-
-# get list of shared cpts
-#year_list = list(auc_agg.test_year.unique())
+# GET LIST OF OUTCOME NAMES TO LOOP THROUGH
 outcome_list = list(auc_agg.outcome.unique())
 num_boots = 1000
-
 outcome_results = []
 for i in outcome_list:
     print(i)
@@ -245,9 +237,10 @@ for i in outcome_list:
                 temp = temp[['sub_boot_aucs', 'agg_boot_aucs']]
                 temp['auc_diff'] = temp.sub_boot_aucs.values - temp.agg_boot_aucs.values
                 temp['agg_diff'] = temp.agg_boot_aucs.values - 0.5
-                # get 0.025 percentile
+                # GET 2.5% VALUE
                 sig_value = temp.auc_diff.quantile(0.025)
                 sig_value_agg = temp.agg_diff.quantile(0.025)
+                # GENERATE PVALUES
                 agg_p_value = 1 - ((temp[temp['agg_boot_aucs'] > 0.5].shape[0]))/(temp.shape[0] +1)
                 diff_p_value = 1 - (temp[temp['auc_diff'] > 0].shape[0]) / (temp.shape[0] +1)
                 cpt_results.append(pd.DataFrame(
@@ -258,14 +251,12 @@ for i in outcome_list:
 
 sig_cpts = pd.concat(outcome_results).reset_index(drop=True)
 
-import statsmodels.stats.multitest as smm
 
-# loop through outcome and year to get adjusted pvalues
+# LOOP THROUGH OUTCOME AND YEAR AND GET FDR CORRECT PVALUES
 outcome_results = []
 for i in outcome_list:
     print(i)
     temp_sig = sig_cpts[sig_cpts['outcome'] == i].reset_index(drop=True)
-
     year_list = temp_sig.test_year.unique()
     year_results = []
     for j in year_list:

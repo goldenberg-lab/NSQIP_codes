@@ -1,14 +1,13 @@
 import numpy as np
 import pandas as pd
 import os
-from support.support_funs import stopifnot
-from support.naive_bayes import mbatch_NB
 from sklearn import metrics
-import seaborn as sns
 from sklearn.ensemble import RandomForestClassifier
-from sklearn import preprocessing
-from support.support_funs import stopifnot
-from support.mdl_funs import normalize, idx_iter
+
+# DESCRIPTION: THIS SCRIPT GENERATES AUC SCORES FOR THE AGGREGATE AND SUB MODELS.
+# SAVES TO OUTPUT:
+# --- rf_agg.csv
+# --- rf_sub.csv
 
 ###############################
 # ---- STEP 1: LOAD DATA ---- #
@@ -67,13 +66,12 @@ for ii, vv in enumerate(cn_Y):
         print('Train Year %i' % (yy))
         idx_train = dat_X.operyr.isin(tmp_years) & (dat_X.operyr < yy)
         idx_test = dat_X.operyr.isin(tmp_years) & (dat_X.operyr == yy)
-        # get dummies
         Xtrain, Xtest = dat_X.loc[idx_train, cn_X].reset_index(drop=True), \
                         dat_X.loc[idx_test, cn_X].reset_index(drop=True)
         ytrain, ytest = dat_Y.loc[idx_train, [vv]].reset_index(drop=True), \
                         dat_Y.loc[idx_test, [vv]].reset_index(drop=True)
 
-        # store cpt code
+        # STORE CPT CODES AND DELETE FROM DATA
         tmp_cpt = Xtest.cpt
         # remove cpt code
         del Xtrain['cpt']
@@ -84,10 +82,10 @@ for ii, vv in enumerate(cn_Y):
         rf_mod = clf.fit(Xtrain, ytrain.values.ravel())
         rf_preds = rf_mod.predict_proba(Xtest)[:,1]
 
-
         # STORE RESULTS FROM AGGREGATE MODEL
         tmp_holder = pd.DataFrame({'y_preds': list(rf_preds), 'y_values': list(ytest.values), 'cpt': list(tmp_cpt)})
         within_holder = []
+
         # LOOP THROUGH EACH CPT CODE
         for cc in top_cpts:
             #print('cpt %s' % (cc))
@@ -123,7 +121,6 @@ for ii, vv in enumerate(cn_Y):
         print('Train Year %i' % (yy))
         idx_train = dat_X.operyr.isin(tmp_years) & (dat_X.operyr < yy)
         idx_test = dat_X.operyr.isin(tmp_years) & (dat_X.operyr == yy)
-        # get dummies
         Xtrain, Xtest = dat_X.loc[idx_train, cn_X].reset_index(drop=True), \
                         dat_X.loc[idx_test, cn_X].reset_index(drop=True)
         ytrain, ytest = dat_Y.loc[idx_train, [vv]].reset_index(drop=True), \
@@ -131,7 +128,6 @@ for ii, vv in enumerate(cn_Y):
 
         within_holder = []
         for cc in top_cpts:
-            #print('cpt %s' % (cc))
             # SUBSET XTRAIN AND XTEST BY CPT CODE
             sub_xtrain = Xtrain[Xtrain['cpt'] == cc]
             sub_xtest = Xtest[Xtest['cpt'] == cc]
@@ -140,7 +136,7 @@ for ii, vv in enumerate(cn_Y):
             sub_ytrain = ytrain[ytrain.index.isin(sub_xtrain.index)]
             sub_ytest = ytest[ytest.index.isin(sub_xtest.index)]
 
-            # remove cpt column
+            # REMOVE CPT COLUMN
             del sub_xtrain['cpt']
             del sub_xtest['cpt']
 
@@ -150,17 +146,9 @@ for ii, vv in enumerate(cn_Y):
                                                    'cpt': cc}, index=[0]))
             else:
                 # TRAIN MODEL
-
                 clf = RandomForestClassifier(n_estimators=100)
                 rf_mod = clf.fit(sub_xtrain, sub_ytrain.values.ravel())
-                #logisticreg = LogisticRegression(solver='liblinear', max_iter=200)
-                #logit_fit = logisticreg.fit(sub_xtrain, sub_ytrain.values.ravel())
-
-                # TEST MODEL
-                #logit_preds = logit_fit.predict_proba(sub_xtest)[:, 1]
                 rf_preds = rf_mod.predict_proba(sub_xtest)[:, 1]
-
-
                 within_holder.append(
                     pd.DataFrame({'auc': metrics.roc_auc_score(sub_ytest.values, rf_preds), 'cpt': cc}, index=[0]))
 
@@ -169,5 +157,3 @@ for ii, vv in enumerate(cn_Y):
 
 res_y_all = pd.concat(holder_y_all).reset_index(drop=True)
 res_y_all.to_csv(os.path.join(dir_output, 'rf_sub.csv'), index=False)
-
-
