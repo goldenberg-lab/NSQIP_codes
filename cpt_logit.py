@@ -42,7 +42,11 @@ dat_Y = dat_Y[dat_Y.caseid.isin(dat_X.caseid)].reset_index(drop=True)
 
 # GET COLUMNS
 cn_X = list(dat_X.columns[2:])
-cn_Y = list(dat_Y.columns[2:])
+cn_Y = list(dat_Y.columns[25:37])
+
+# DELETE NON AGG LABELS
+dat_Y.drop(dat_Y.columns[[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]],
+           axis=1, inplace=True)
 
 ###############################################
 # ---- STEP 2: LEAVE-ONE-YEAR - ALL VARIABLES  ---- #
@@ -86,7 +90,7 @@ for ii, vv in enumerate(cn_Y):
         within_holder = []
         # LOOP THROUGH EACH CPT CODE
         for cc in top_cpts:
-            print('cpt %s' % (cc))
+            #print('cpt %s' % (cc))
             sub_tmp_holder = tmp_holder[tmp_holder['cpt'] == cc].reset_index(drop=True)
             if all(sub_tmp_holder.y_values.values == 0):
                 within_holder.append(pd.DataFrame({'auc': 'NA',
@@ -127,7 +131,7 @@ for ii, vv in enumerate(cn_Y):
 
         within_holder = []
         for cc in top_cpts:
-            print('cpt %s' % (cc))
+            #print('cpt %s' % (cc))
             # SUBSET XTRAIN AND XTEST BY CPT CODE
             sub_xtrain = Xtrain[Xtrain['cpt'] == cc]
             sub_xtest = Xtest[Xtest['cpt'] == cc]

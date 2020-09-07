@@ -280,6 +280,6 @@ for i in outcome_list:
 
 sig_cpts = pd.concat(outcome_results).reset_index(drop=True)
 
-sig_cpts = sig_cpts[sig_cpts['sig_value_diff'] >0]
-sig_cpts = sig_cpts[sig_cpts['sig_value_agg']>0]
+#sig_cpts = sig_cpts[sig_cpts['sig_value_diff'] >0]
+#sig_cpts = sig_cpts[sig_cpts['sig_value_agg']>0]
 sig_cpts.to_csv(os.path.join(dir_output, 'rf_sig_cpts.csv'), index=False)
