@@ -2,6 +2,14 @@ import sys
 import numpy as np
 import pandas as pd
 
+def gg_color_hue(n):
+    from colorspace.colorlib import HCL
+    hues = np.linspace(15, 375, num=n + 1)[:n]
+    hcl = []
+    for h in hues:
+        hcl.append(HCL(H=h, L=65, C=100).colors()[0])
+    return hcl
+
 def stopifnot(check,stmt=None):
     if stmt is None:
         stmt = 'error! Statement is not True'
