@@ -7,8 +7,8 @@ from sklearn.linear_model import LogisticRegression
 # DESCRIPTION: THIS SCRIPT GENERATES AUC SCORES FOR THE AGGREGATE AND SUB MODELS.
 # THE SUBMODELS ARE DEFINED BY THEIR ORGAN GROUP, NOT INDIVIDUAL CPT CODE
 # SAVES TO OUTPUT:
-# --- logit_agg_title.csv
-# --- logit_sub_title.csv
+# --- logit_agg_main.csv
+# --- logit_sub_main.csv
 ###############################
 # ---- STEP 1: LOAD DATA ---- #
 dir_base = os.getcwd()
@@ -28,24 +28,22 @@ dat_X = pd.get_dummies(dat_X)
 dat_X['cpt'] = 'c' + dat_X.cpt.astype(str)
 
 # GET CPT ANNOTATIONS
-file_name = 'cpt_anno.csv'
+file_name = 'cpt_anno_group.csv'
 cpt_anno = pd.read_csv(os.path.join(dir_output, file_name))
 cpt_anno['cpt'] = 'c' + cpt_anno.cpt.astype(str)
 
 # GROUP BY TITLE AND GET COUNTS - REMOVE GROUPS WITH ONLY 1 COUNT
-cpt_groups = cpt_anno.groupby('title').size().sort_values(ascending=False)
-cpt_groups = pd.DataFrame({'cpt_title': cpt_groups.index, 'count': cpt_groups.values})
+cpt_groups = cpt_anno.groupby('main_group').size().sort_values(ascending=False)
+cpt_groups = pd.DataFrame({'cpt_main': cpt_groups.index, 'count': cpt_groups.values})
 
 # KEEP CPT TITLES THAT HAVE MORE THAN ONE CPT CODE ASSOCIATED WITH THEM
 top_groups = cpt_groups[cpt_groups['count'] > 1]
-top_groups = top_groups.cpt_title.unique()
+top_groups = top_groups.cpt_main.unique()
 
 # SUBSET CPT GROUPS TO KEEP ONLY CPTS THAT HAVE A CORRESPONDING TITLE
-cpt_anno = cpt_anno[cpt_anno.title.isin(top_groups)].reset_index(drop=True)
+cpt_anno = cpt_anno[cpt_anno.main_group.isin(top_groups)].reset_index(drop=True)
 top_cpts = cpt_anno.cpt.unique()
 
-# SUBSET CPT_GROUPS TO GET
-# HERE NEED TO FIND A WAY TO GET THE CPT NAMES ASSOCIATED WITH EACH TITLE (MAYBE REFORMAT DATA IN R)
 
 # SUBET BY DATA FRAMES BY CPT CODES
 dat_X = dat_X[dat_X.cpt.isin(top_cpts)].reset_index(drop=True)
@@ -101,11 +99,11 @@ for ii, vv in enumerate(cn_Y):
         within_holder = []
 
         # GET TOP TITLES
-        top_titles = cpt_anno.title.unique()
+        top_titles = cpt_anno.main_group.unique()
 
         # LOOP THROUGH EACH CPT TITLE
         for cc in top_titles:
-            title_cpts = cpt_anno[cpt_anno['title']==cc].reset_index(drop=True)
+            title_cpts = cpt_anno[cpt_anno['main_group']==cc].reset_index(drop=True)
             title_cpts = title_cpts.cpt.unique()
             sub_tmp_holder = tmp_holder[tmp_holder['cpt'].isin(title_cpts)].reset_index(drop=True)
             if all(sub_tmp_holder.y_values.values == 0) or len(sub_tmp_holder.y_values.values) <= 1:
@@ -120,7 +118,7 @@ for ii, vv in enumerate(cn_Y):
     holder_y_all.append(pd.concat(holder_y).assign(outcome=vv))
 
 res_y_all = pd.concat(holder_y_all).reset_index(drop=True)
-res_y_all.to_csv(os.path.join(dir_output, 'agg_cpt_title.csv'), index=False)
+res_y_all.to_csv(os.path.join(dir_output, 'logit_agg_main.csv'), index=False)
 
 ####################################################
 # ---- STEP 3: LEAVE-ONE-YEAR - ALL VARIABLES, FOR EACH CPT CODE, SUB MODELS---- #
@@ -146,12 +144,12 @@ for ii, vv in enumerate(cn_Y):
                         dat_Y.loc[idx_test, [vv]].reset_index(drop=True)
 
         # GET TOP TITLES TO LOOP THROUGH
-        top_titles = cpt_anno.title.unique()
+        top_titles = cpt_anno.main_group.unique()
         within_holder = []
         for cc in top_titles:
 
             # GET LIST OF TITLES
-            title_cpts = cpt_anno[cpt_anno['title'] == cc].reset_index(drop=True)
+            title_cpts = cpt_anno[cpt_anno['main_group'] == cc].reset_index(drop=True)
             title_cpts = list(title_cpts.cpt.unique())
 
             # SUBSET XTRAIN AND XTEST BY CPT CODE
@@ -185,5 +183,5 @@ for ii, vv in enumerate(cn_Y):
     holder_y_all.append(pd.concat(holder_y).assign(outcome=vv))
 
 res_y_all = pd.concat(holder_y_all).reset_index(drop=True)
-res_y_all.to_csv(os.path.join(dir_output, 'sub_cpt_title.csv'), index=False)
+res_y_all.to_csv(os.path.join(dir_output, 'logit_sub_main.csv'), index=False)
 

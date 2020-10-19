@@ -34,6 +34,44 @@ echo "----- Step 6: Evaluate Results -----"
 python auc_eval.py
 # Output: df_decomp_nnet.csv, various figures!
 
+echo "----- logistic regression on aggregate and submodels -----"
+python cpt_logit.py
+# Output: logit_agg.csv, logit_sub.csv, logit_agg_phat.csv, logit_sub_phat.csv
+
+echo "----- model for cpt annotation file on aggregate and submodels -----"
+python cpt_anno.py
+# Output: logit_agg_title.csv, logit_sub_title.csv
+
+echo "----- model for cpt main groups file on aggregate and submodels -----"
+python cpt_main_group.py
+# Output: logit_agg_main.csv, logit_sub_main.csv
+
+echo "----- risk quintiles on aggregate and submodels -----"
+python cpt_logit_quintiles.py
+# Output: logit_agg_quin_cpt.csv, logit_agg_quin_bin.csv, logit_agg_quin_coef.csv, logit_sub_quin_cpt.csv, logit_sub_quin_bin.csv, logit_sub_quin_coef_bin.csv, logit_sub_quin_coef_cpt.csv
+
+echo "----- risk quintiles on aggregate and submodels for all years  -----"
+python cpt_logit_quintiles_all.py
+# logit_agg_coef_all_years.csv, logit_sub_coef_all_years.csv
+
+echo "----- random forest on aggregate and submodels -----"
+python cpt_rf.py
+# Output: rf_agg.csv, rf_sub.csv,
+
+echo "----- xgbBoost on aggregate and submodels -----"
+python cpt_xgb.py
+# Output: xgb_agg.csv, xgb_sub.csv, 
+
+echo "----- logistic regression with bootstrapped AUCs on aggregate and submodels -----"
+python cpt_logit_bootstrap.py
+# Output: logit_boot_agg.csv, logit_boot_sub.csv, logit_sig_cpts.csv
+
+echo "----- plot results from models on cpt, quintiles, and cpt annotations -----"
+python generate_plots.py
+# Output: plots to save in figures folder
+
+
+
 
 
 

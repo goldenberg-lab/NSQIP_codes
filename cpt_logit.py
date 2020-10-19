@@ -77,7 +77,7 @@ for ii, vv in enumerate(cn_Y):
         del Xtrain['cpt']
         del Xtest['cpt']
 
-        # TRAIN MODEL
+
         logisticreg = LogisticRegression(solver='liblinear', max_iter=200)
         logit_fit = logisticreg.fit(Xtrain, ytrain.values.ravel())
 
@@ -301,7 +301,7 @@ for ii, vv in enumerate(cn_Y):
                                                    'cpt': cc}, index=[0]))
             else:
                 # TRAIN MODEL
-                logisticreg = LogisticRegression(solver='liblinear', max_iter=200)
+                logisticreg = LogisticRegression(solver='liblinear', max_iter=200, penalty='elasticnet')
                 logit_fit = logisticreg.fit(sub_xtrain, sub_ytrain.values.ravel())
 
 

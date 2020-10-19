@@ -13,7 +13,7 @@ dir_figures = os.path.join(dir_base, '..', 'figures')
 
 # DESCRIPTION: THIS SCRIPT READS IN RESULTS FROM ALL MODELS AND PLOTS AUC COMPARISONS
 
-# SAVES TO OUTPUT:
+# SAVES TO Figures:
 # --- logit_results/auc_compare.png
 # --- logit_results/auc_compare_phat.png
 # --- logit_results/auc_compare_title.png
@@ -93,6 +93,7 @@ plot_auc(read_file_1='xgb_sub.csv', read_file_2='xgb_agg.csv', plot_dir='xgb_res
 
 # PLOT AUC COMPARISON FOR LOGIT MODELS ON CPT TITLE GROUPS AND ORGANS
 plot_auc(read_file_1='sub_cpt_title.csv', read_file_2='agg_cpt_title.csv', plot_dir='logit_results', save_file='auc_compare_title.png')
+plot_auc(read_file_1='logit_sub_main.csv', read_file_2='logit_agg_main.csv', plot_dir='logit_results', save_file='auc_compare_main.png')
 plot_auc(read_file_1='sub_cpt_organ.csv', read_file_2='agg_cpt_organ.csv', plot_dir='logit_results', save_file='auc_compare_organ.png')
 
 # PLOT AUC COMPARISON FOR LOGIT RISK QUINTILES

@@ -120,7 +120,7 @@ for ii, vv in enumerate(cn_Y):
     holder_y_all.append(pd.concat(holder_y).assign(outcome=vv))
 
 res_y_all = pd.concat(holder_y_all).reset_index(drop=True)
-res_y_all.to_csv(os.path.join(dir_output, 'logit_agg_organ.csv'), index=False)
+res_y_all.to_csv(os.path.join(dir_output, 'agg_cpt_organ.csv'), index=False)
 
 ####################################################
 # ---- STEP 3: LEAVE-ONE-YEAR - ALL VARIABLES, FOR EACH CPT CODE, SUB MODELS---- #
@@ -185,5 +185,5 @@ for ii, vv in enumerate(cn_Y):
     holder_y_all.append(pd.concat(holder_y).assign(outcome=vv))
 
 res_y_all = pd.concat(holder_y_all).reset_index(drop=True)
-res_y_all.to_csv(os.path.join(dir_output, 'logit_sub_organ.csv'), index=False)
+res_y_all.to_csv(os.path.join(dir_output, 'sub_cpt_organ.csv'), index=False)
 

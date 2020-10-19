@@ -7,14 +7,76 @@ import matplotlib.pyplot as plt
 matplotlib.style.use('ggplot')
 pd.set_option('display.max_columns', None)
 
-# PART 1 DESCRIPTION: READ IN SIGNIFICANT CPT RESULTS AND JOIN WITH DATASET THAT HAS THE SUM OF POSITIVE VALUES FOR EACH
-# CPT/OUTCOME/YEAR COMBINATION. THE IDEA IS TO SEE IF THE NUMBER OF POSITIVE LABELS HAS AN IMPACT ON IF THE SUB MODEL
-# OUT PERFORMS THE AGG MODEL FOR A GIVEN CPT.
+dir_base = os.getcwd()
+dir_output = os.path.join(dir_base, '..', 'output')
+dir_figures = os.path.join(dir_base, '..', 'figures')
 
-# PART 2 DESCRIPTION: READ IN CPT ANNOTATION DATA AND SUBSET BY SIGNIFICANT CPTS TO SEE DESCRIPTION
+#########################################
+# ---- PART 1 WHICH CPT CODES PERFORM BEST ON AGG AND SUB ---- #
 
-###############################
-# ---- PART 1: PLOT NUMBER OF POSTIVE VALUE AGAINST P VALUE ---- #
+# READ IN LOGIT SUB AND AGG MODELS
+logit_agg = pd.read_csv(os.path.join(dir_output, 'logit_agg.csv'))
+logit_sub = pd.read_csv(os.path.join(dir_output, 'logit_sub.csv'))
+
+# COMBINE DATA BY STACKING
+logit_sub = logit_sub.dropna().reset_index(drop=True)
+logit_agg = logit_agg.dropna().reset_index(drop=True)
+logit_sub.insert(0, 'model', 'sub')
+logit_agg.insert(0, 'model', 'agg')
+dat = pd.concat([logit_agg, logit_sub], axis=0).reset_index(drop=True)
+
+# FILTER AUC OVER .8
+dat =dat[dat['auc']>0.8].reset_index(drop=True)
+
+# GROUP BY OUTCOME, MODEL, AND GET COUNTS
+dat_outcome = dat.groupby(['model', 'outcome']).size().reset_index(name="counts")
+
+# GROUP BY CPT, MODEL, AND GET COUNTS
+dat_cpt = dat.groupby(['model', 'cpt']).size().reset_index(name="counts")
+
+
+
+
+
+
+# LOAD SIGNIFICANT CPTS
+logit_results = pd.read_csv(os.path.join(dir_output, 'logit_sig_cpts.csv'))
+logit_results = logit_results.rename(columns={'test_year': 'operyr'}, inplace=False)
+
+# SUBSET BY OUTCOME, LATER PUT INTO LOOP
+logit_results = logit_results[logit_results['outcome']=='agg_nsi1'].reset_index(drop=True)
+
+#########################################
+# ---- PART 2 WHICH CPT CODES HAVE BETTER SUB AUC (SIGNIFICANT AND INSIGNIFICANT). ARE THEY BEATING A GOOD AGG AUC? ---- #
+
+
+
+
+#########################################
+# ----  PART 3 ARE THE BEST CPTS CONSISTENT ACROSS OUTCOMES (SSI IN PARTICULAR) ---- #
+
+
+
+
+
+#########################################
+# ---- PART 4 WHAT DRIVES THESE RESULTS? SAMPLE SIZE? AVAILABILITY OF POSITIVE OUTCOMES IN A GIVEN YEAR (CHECK SAME CPTS ACROSS YEARS) ---- #
+
+
+
+
+#########################################
+# ---- PART 5 DESCRIPTION: READ IN CPT ANNOTATION DATA AND SUBSET BY SIGNIFICANT CPTS TO SEE DESCRIPTION ---- #
+
+
+
+#########################################
+# ---- PART 6 RERUN LOGIT WITHOUT REMOVING SO MANY CPTS AND COMPARE TO CURRENT RESULTS WHERE ONLY ONES WITH 1000 WERE KEPT ---- #
+
+
+#########################################
+
+# ---- PART 2: PLOT NUMBER OF POSTIVE VALUE AGAINST P VALUE ---- #
 dir_base = os.getcwd()
 dir_output = os.path.join(dir_base, '..', 'output')
 dir_figures = os.path.join(dir_base, '..', 'figures')
@@ -45,7 +107,7 @@ dat = dat[dat['operyr']!=2012].reset_index(drop=True)
 # GROUP BY YEAR AND CPT AND GET SUM OF POSITIVE LABELS FOR EACH OUTCOME
 dat_labels = dat.groupby(['operyr', 'cpt'])[cn_Y].apply(np.sum).reset_index()
 
-# PUT DATA IN LONG FROMAT FOR PLOTTING
+# PUT DATA IN LONG FROMAT FOR hePLOTTING
 dat_labels = dat_labels.melt(id_vars=['operyr', 'cpt'], var_name='outcome', value_name='value')
 
 # LOAD SIGNIFICANT CPTS
@@ -68,7 +130,7 @@ logit_sig = logit_results[logit_results['agg_p_value'] <=0.05].reset_index(drop=
 sns.scatterplot(x='value',y= 'diff_p_value', data=logit_sig)
 
 ###############################
-# ---- PART 2: LOOK AT CPT DESCRIPTION FOR THE SIGNIFICANT CPTS ---- #
+# ---- PART 3: LOOK AT CPT DESCRIPTION FOR THE SIGNIFICANT CPTS ---- #
 
 # LOAD CPT ANNOTATION
 cpt_anno = pd.read_csv(os.path.join(dir_output, 'cpt_anno.csv'))
