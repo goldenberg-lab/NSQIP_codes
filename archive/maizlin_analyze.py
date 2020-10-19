@@ -3,7 +3,8 @@ import numpy as np
 import pandas as pd
 import os
 import gc
-from support.support_funs import stopifnot
+from support.support_funs import stopifnot, gg_color_hue
+from plotnine import *
 
 import seaborn as sns
 from matplotlib import pyplot as plt
@@ -25,8 +26,7 @@ df_scores = pd.read_csv(os.path.join(dir_output,'maizlin_res_df.csv')).rename(co
 # load in associated x_data for each
 cn_X=['caseid','operyr','cpt','race','sex','age_days']
 # Merge
-df_scores = df_scores.merge(pd.read_csv(os.path.join(dir_output,'X_preop.csv'),usecols=cn_X),
-                            on='caseid',how='left')
+df_scores = df_scores.merge(pd.read_csv(os.path.join(dir_output,'X_preop.csv'),usecols=cn_X), on='caseid',how='left')
 
 # Get CPT counts
 dat_n_cpt = df_scores[df_scores.outcome == 'orgspcssi'].cpt.value_counts().reset_index().rename(columns={'cpt':'n','index':'cpt'})
@@ -41,10 +41,32 @@ dat_outcome_share = dat_outcome_share[(dat_outcome_share.y == 1) & (dat_outcome_
 dat_outcome_share['cpt_share'] = dat_outcome_share.n / dat_n_y_cpt.cpt.unique().shape[0]
 print(np.round(dat_outcome_share,2))
 
+#################################
+### ---- (2) Naive Bayes ---- ###
 
+from sklearn.naive_bayes import BernoulliNB
+from sklearn.preprocessing import OneHotEncoder
+cn_nb = ['y','cpt']
+ylbls = df_scores.outcome.value_counts().index.to_list()
+auc_nb = np.zeros(len(ylbls))
+for i, y in enumerate(ylbls):
+    print(y)
+    tmp_y = df_scores.query('outcome==@y')
+    tmp_y_train = tmp_y.query('set=="training"')[cn_nb]
+    tmp_y_val = tmp_y.query('set=="validation"')[cn_nb]
+    ytrain, yval = tmp_y_train.y.values, tmp_y_val.y.values
+    xtrain, xval = np.atleast_2d(tmp_y_train.cpt).T, np.atleast_2d(tmp_y_val.cpt).T
+    enc = OneHotEncoder(sparse=False, handle_unknown='ignore', dtype=int)
+    enc.fit(xtrain)
+    clf = BernoulliNB().fit(X=enc.transform(xtrain),y=ytrain)
+    pval_val = clf.predict_proba(X=enc.transform(xval))[:,1]
+    auc_val = auc(y=yval,score=pval_val)
+    auc_nb[i] = auc_val
+
+df_nb = pd.DataFrame({'outcome':ylbls, 'auc_nb':auc_nb})
 
 #############################
-### ---- (2) Metrics ---- ###
+### ---- (3) Metrics ---- ###
 
 # (i) AUC by outcome
 dat_auc = df_scores.groupby('outcome').apply(lambda x: pd.Series({'auc':auc(y=x['y'].values,score=x['yhat'].values)})).reset_index()
@@ -53,7 +75,7 @@ dat_auc = dat_auc.merge(df_scores.groupby('outcome').y.sum().reset_index())
 
 print(dat_auc)
 # Dictionary
-{'orgspcssi':'Organ/Space SSI','dehis':'Deep Wound Disruption',
+di_lbls = {'orgspcssi':'Organ/Space SSI','dehis':'Deep Wound Disruption',
  'wndinfd':'Deep Incisional SSI','sdehis':'Superficial Wound Disruption',
  'supinfec':'Superficial Incisional SSI'}
 # AUC within each outcome
@@ -65,13 +87,37 @@ dat_auc_cpt['share'] = dat_auc_cpt.n / dat_auc_cpt.y
 dat_auc_cpt_agg = dat_auc_cpt.groupby('outcome').apply(lambda x:
         pd.Series({'mu':np.mean(x['auc']),'wmu':np.average(x['auc'],weights=x['share'])})).reset_index()
 
+# Combine
+dat_auc_both = dat_auc.merge(dat_auc_cpt_agg).drop(columns=['y','wmu'])
+dat_auc_both.rename(columns={'auc':'auc_agg','mu':'auc_within'},inplace=True)
+dat_auc_both = dat_auc_both.assign(lbl=lambda x: x.outcome.map(di_lbls))
+dat_auc_both = dat_auc_both.merge(df_nb.assign(lbl=lambda x: x.outcome.map(di_lbls)))
+
+
+# Compare the Maizlin results
+di_maizlin = {'Deep Wound Disruption':0.754, 'Superficial Incisional SSI':0.701,'Deep Incisional SSI':0.755, 'Organ/Space SSI':0.839}
+df_maizlin = pd.DataFrame.from_dict(di_maizlin,orient='index').reset_index().rename(columns={'index':'lbl',0:'auc_maizlin'})
+df_maizlin = dat_auc_both.merge(df_maizlin).drop(columns='outcome').melt('lbl',None,'tt')
+# Make a plot
+tit = 'Decomposition of within vs overall AUROC score\nWithin AUROC is average over all CPT codes'
+di_lblz = {'auc_agg':'AUROC-Overall', 'auc_within':'AUROC-within',
+           'auc_nb':'AUROC-NB', 'auc_maizlin':'AUROC-Maizlin'}
+colz = gg_color_hue(3) + ['black']
+gg_maizlin = (ggplot(df_maizlin.assign(tt=lambda x: x.tt.map(di_lblz)), aes(x='lbl',y='value',color='tt')) +
+              theme_bw() + geom_point(size=2,position=position_dodge(0.5)) +
+              ggtitle(tit) +
+              theme(axis_text_x=element_text(angle=45),axis_title_x=element_blank()) +
+              scale_color_manual(name='AUROC', values=colz) +
+              geom_hline(yintercept=0.5, linetype='--'))
+gg_maizlin.save(os.path.join(dir_figures,'gg_maizlin.png'),height=4,width=6)
+
 # # AUC by year
 # dat_auc_yr
 # df_scores.groupby(['outcome','operyr']).apply(lambda x:
 #             pd.Series({'auc':auc(y=x['y'].values,score=x['yhat'].values)})).reset_index()
 
 #############################
-### ---- (3) FIGURES ---- ###
+### ---- (4) FIGURES ---- ###
 
 # Detioration in AUC by CPT code
 tmp = dat_auc_cpt_agg.merge(dat_auc).melt(id_vars='outcome',value_vars=['auc','wmu']).rename(columns={'variable':'type'})
@@ -91,7 +137,6 @@ fig = sns.scatterplot(x='outcome',y='cpt_share',hue=None,data=dat_outcome_share,
 fig.set_title('Share of CPT with outcome')
 fig.set_ylabel('Percent');fig.set_xlabel('')
 fig.figure.savefig(os.path.join(dir_figures,'cpt_outcome_share.png'))
-
 
 
 
