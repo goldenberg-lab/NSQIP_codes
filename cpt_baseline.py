@@ -53,7 +53,7 @@ for ii, vv in enumerate(cn_Y):
         mdl_bernoulli.fit(Xtrain,ytrain.values,mbatch=100000)
         phat_bernoulli = mdl_bernoulli.predict(Xtest)[:,1]
         case_id = Xtext.caseid
-        holder_score.append(pd.DataFrame({'y':ytest.values,'phat':phat_bernoulli,'operyr':yy}))
+        holder_score.append(pd.DataFrame({'y':ytest.values,'phat':phat_bernoulli,'operyr':yy, 'caseid':case_id}))
         holder_metrics.append(pd.DataFrame({'auc':metrics.roc_auc_score(ytest.values, phat_bernoulli),
             'pr':metrics.average_precision_score(ytest.values, phat_bernoulli)},index=[0]))
     holder_vv.append(pd.concat(holder_metrics).assign(outcome=vv,operyr=tmp_train_years))
