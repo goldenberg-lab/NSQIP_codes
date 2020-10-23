@@ -6,20 +6,20 @@
 
 conda activate NSQIP
 
-echo "----- Step 1: Combine raw data from Stata format -----"
-python 01a_combine_data.py 
+#echo "----- Step 1: Combine raw data from Stata format -----"
+#python 01a_combine_data.py
 # Output: combined_raw.csv and yr_vars.csv
 
-echo "----- Step 2A: Process data to produce y and X matrices -----"
-python yX_process.py 
+#echo "----- Step 2A: Process data to produce y and X matrices -----"
+#python yX_process.py
 # Output: y_bin.csv and X_preop.csv
 
-echo "----- Step 2B: Create aggregated labels -----"
-python y_agg.py
+#echo "----- Step 2B: Create aggregated labels -----"
+#python y_agg.py
 # Output: y_agg.csv
 
-echo "----- Step 3: Test X-imputation -----"
-python X_imputation.py
+#echo "----- Step 3: Test X-imputation -----"
+#python X_imputation.py
 # Output: X_imputed.csv
 
 echo "----- Step 4: Establish CPT Baseline -----"
@@ -50,9 +50,6 @@ echo "----- risk quintiles on aggregate and submodels -----"
 python cpt_logit_quintiles.py
 # Output: logit_agg_quin_cpt.csv, logit_agg_quin_bin.csv, logit_agg_quin_coef.csv, logit_sub_quin_cpt.csv, logit_sub_quin_bin.csv, logit_sub_quin_coef_bin.csv, logit_sub_quin_coef_cpt.csv
 
-echo "----- risk quintiles on aggregate and submodels for all years  -----"
-python cpt_logit_quintiles_all.py
-# logit_agg_coef_all_years.csv, logit_sub_coef_all_years.csv
 
 echo "----- random forest on aggregate and submodels -----"
 python cpt_rf.py
