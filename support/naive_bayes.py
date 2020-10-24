@@ -32,7 +32,7 @@ def x_batch(data, n, splits, cidx, enc, iter):
     return(np.vstack(xmat))
 
 
-#self = mbatch_NB(method='gaussian');mbatch=100000;data=Xtrain;lbls=ytrain.values
+# self = mbatch_NB(method='bernoulli');mbatch=100000;data=Xtrain;lbls=ytrain.values
 class mbatch_NB():
     def __init__(self, method='bernoulli'):
         self.method = method.lower()

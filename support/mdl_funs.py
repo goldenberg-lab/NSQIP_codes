@@ -129,6 +129,7 @@ class col_encoder():
                 self.nenc = ss(copy=False)
                 self.nenc.mean_ = x.iloc[:, self.nidx].mean(axis=0).values
                 self.nenc.scale_ = x.iloc[:, self.nidx].std(axis=0).values
+                self.nenc.n_features_in_ = self.nidx.shape[0]
                 self.nenc.p = self.nidx.shape[0]
                 self.nenc.cn = list(self.cn[self.nidx])
                 self.all_enc['nenc'] = self.nenc
@@ -233,6 +234,7 @@ class normalize():
         self.nenc = ss()
         self.nenc.mean_ = data.iloc[:, self.nidx].mean().values
         self.nenc.scale_ = data.iloc[:, self.nidx].std().values
+        self.nenc.n_features_in_ = self.nidx.shape[0]
         self.cn = list(self.cenc.get_feature_names(data.columns[self.cidx].astype(str))) + \
                   data.columns[self.nidx].to_list()
         self.lst_enc = [self.cenc, self.nenc]
