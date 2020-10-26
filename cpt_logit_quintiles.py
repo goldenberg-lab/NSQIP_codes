@@ -3,7 +3,8 @@ import pandas as pd
 import os
 from sklearn import metrics
 from sklearn.linear_model import LogisticRegression
-
+from support.acc_funs import auc_decomp
+from sklearn.model_selection import GridSearchCV
 # DESCRIPTION: THIS SCRIPT GENERATES AUC SCORES AND COEFFCIENT VALUES FOR THE AGGREGATE AND SUB MODELS.
 # THE SUBMODELS ARE DEFINED BY THEIR RISK QUINTILE, NOT INDIVIDUAL CPT CODE
 # SAVES TO OUTPUT:
@@ -97,12 +98,12 @@ for ii, vv in enumerate(cn_Y):
         del Xtrain['cpt']
         del Xtest['cpt']
 
-        # TRAIN MODEL
-        logisticreg = LogisticRegression(solver='liblinear', max_iter=200)
-        logit_fit = logisticreg.fit(Xtrain, ytrain.values.ravel())
+        # grid search
+        param_grid = {'C': [0.001, 0.01, 0.1, 1, 10, 100, 1000]}
+        clf = GridSearchCV(LogisticRegression(penalty='l2', solver='liblinear', max_iter=200), param_grid, n_jobs=6, cv=2)
 
-        # TEST MODEL
-        logit_preds = logit_fit.predict_proba(Xtest)[:, 1]
+        logisiticreg = clf.fit(Xtrain, ytrain.values.ravel())
+        logit_preds = logisiticreg.predict_proba(Xtest)[:, 1]
 
         # GET COEFFCIENTS FROM MODEL AND STORE THEM
         tmp_coef = []
@@ -274,12 +275,13 @@ for ii, vv in enumerate(cn_Y):
                                                          'cpt': cc,
                                                          'num_obs': cpt_ytest.values.size}, index=[0]))
                 else:
-                    # TRAIN MODEL
-                    logisticreg = LogisticRegression(solver='liblinear', max_iter=200)
-                    logit_fit = logisticreg.fit(cpt_xtrain, cpt_ytrain.values.ravel())
+                    # grid search
+                    param_grid = {'C': [0.001, 0.01, 0.1, 1, 10, 100, 1000]}
+                    clf = GridSearchCV(LogisticRegression(penalty='l2', solver='liblinear', max_iter=200), param_grid,
+                                       n_jobs=6,cv=2)
 
-                    # TEST MODEL
-                    logit_preds = logit_fit.predict_proba(cpt_xtest)[:, 1]
+                    logisiticreg = clf.fit(sub_xtrain, sub_ytrain.values.ravel())
+                    logit_preds = logisiticreg.predict_proba(sub_xtest)[:, 1]
 
                     # GET COEFFICIENTS FROM MODEL AND STORE
                     coef_cpt = logit_fit.coef_

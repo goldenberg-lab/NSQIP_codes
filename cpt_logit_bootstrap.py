@@ -43,7 +43,7 @@ dat_Y = dat_Y[dat_Y.caseid.isin(dat_X.caseid)].reset_index(drop=True)
 
 # GET COLUMNS
 cn_X = list(dat_X.columns[2:])
-cn_Y = list(dat_Y.columns[35:37])
+cn_Y = list(dat_Y.columns[25:37])
 
 # DELETE NON AGG LABELS
 dat_Y.drop(dat_Y.columns[[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]],
