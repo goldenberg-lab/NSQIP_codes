@@ -126,7 +126,7 @@ def auc_decomp(y,score,group,rand=False):
         idx_ingroup = (group == gg) & (y==1)
         idx_outgroup = ~(group == gg) & (y == 0)
         holder.append(auc(np.append(y[idx_ingroup],y[idx_outgroup]),
-                np.append(score[idx_ingroup], score[idx_outgroup],rand=rand),both=True))
+                np.append(score[idx_ingroup], score[idx_outgroup]),both=True))
     df_between = pd.DataFrame(np.array(holder),columns=['auc','den'])
     stopifnot(df_between.den.sum() == n_between)
     df_between = df_between.assign(num=lambda x: (x.den * x.auc)) #.astype(int)

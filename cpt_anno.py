@@ -3,6 +3,8 @@ import pandas as pd
 import os
 from sklearn import metrics
 from sklearn.linear_model import LogisticRegression
+from support.acc_funs import auc_decomp
+from sklearn.model_selection import GridSearchCV
 
 # DESCRIPTION: THIS SCRIPT GENERATES AUC SCORES FOR THE AGGREGATE AND SUB MODELS.
 # THE SUBMODELS ARE DEFINED BY THEIR ORGAN GROUP, NOT INDIVIDUAL CPT CODE
@@ -53,7 +55,7 @@ dat_Y = dat_Y[dat_Y.caseid.isin(dat_X.caseid)].reset_index(drop=True)
 
 # GET COLUMNS
 cn_X = list(dat_X.columns[2:])
-cn_Y = list(dat_Y.columns[25:37])
+cn_Y = list(dat_Y.columns[35:37])
 
 # DELETE NON AGG LABELS
 dat_Y.drop(dat_Y.columns[[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]],
@@ -89,12 +91,12 @@ for ii, vv in enumerate(cn_Y):
         del Xtrain['cpt']
         del Xtest['cpt']
 
-        # TRAIN MODEL
-        logisticreg = LogisticRegression(solver='liblinear', max_iter=200)
-        logit_fit = logisticreg.fit(Xtrain, ytrain.values.ravel())
+        # grid search
+        param_grid = {'C': [0.001, 0.01, 0.1, 1, 10, 100, 1000]}
+        clf = GridSearchCV(LogisticRegression(penalty='l2', solver='liblinear', max_iter=200), param_grid, n_jobs=6, cv=2)
 
-        # PREDICT
-        logit_preds = logit_fit.predict_proba(Xtest)[:, 1]
+        logisiticreg = clf.fit(Xtrain, ytrain.values.ravel())
+        logit_preds = logisiticreg.predict_proba(Xtest)[:, 1]
 
         # STORE RESULTS FROM AGGREGATE MODEL
         tmp_holder = pd.DataFrame({'y_preds': list(logit_preds), 'y_values': list(ytest.values), 'cpt': list(tmp_cpt)})
@@ -171,12 +173,13 @@ for ii, vv in enumerate(cn_Y):
                 within_holder.append(pd.DataFrame({'auc': 'NA',
                                                    'cpt': cc}, index=[0]))
             else:
-                # TRAIN MODEL
-                logisticreg = LogisticRegression(solver='liblinear', max_iter=200)
-                logit_fit = logisticreg.fit(sub_xtrain, sub_ytrain.values.ravel())
+                # grid search
+                param_grid = {'C': [0.001, 0.01, 0.1, 1, 10, 100, 1000]}
+                clf = GridSearchCV(LogisticRegression(penalty='l2', solver='liblinear', max_iter=200), param_grid,
+                                   n_jobs=6, cv=2)
 
-                # TEST MODEL
-                logit_preds = logit_fit.predict_proba(sub_xtest)[:, 1]
+                logisiticreg = clf.fit(sub_xtrain, sub_ytrain.values.ravel())
+                logit_preds = logisiticreg.predict_proba(sub_xtest)[:, 1]
 
                 within_holder.append(
                     pd.DataFrame({'auc': metrics.roc_auc_score(sub_ytest.values, logit_preds), 'cpt': cc}, index=[0]))

@@ -26,13 +26,13 @@ echo "----- Step 4: Establish CPT Baseline -----"
 python cpt_baseline.py
 # Output: naivebayes_results.csv, auc_naivebayes1.png, auc_naivebayes2.png
 
-echo "----- Step 5: Run Multitask NNet -----"
+#echo "----- Step 5: Run Multitask NNet -----"
 python mtask_pytorch.py
-# Output: naivebayes_results.csv, auc_naivebayes1.png, auc_naivebayes2.png
+Output: naivebayes_results.csv, auc_naivebayes1.png, auc_naivebayes2.png
 
-echo "----- Step 6: Evaluate Results -----"
+#echo "----- Step 6: Evaluate Results -----"
 python auc_eval.py
-# Output: df_decomp_nnet.csv, various figures!
+Output: df_decomp_nnet.csv, various figures!
 
 echo "----- logistic regression on aggregate and submodels -----"
 python cpt_logit.py
@@ -50,13 +50,13 @@ echo "----- risk quintiles on aggregate and submodels -----"
 python cpt_logit_quintiles.py
 # Output: logit_agg_quin_cpt.csv, logit_agg_quin_bin.csv, logit_agg_quin_coef.csv, logit_sub_quin_cpt.csv, logit_sub_quin_bin.csv, logit_sub_quin_coef_bin.csv, logit_sub_quin_coef_cpt.csv
 
-echo "----- random forest on aggregate and submodels -----"
-python cpt_rf.py
+#echo "----- random forest on aggregate and submodels -----"
+#python cpt_rf.py
 # Output: rf_agg.csv, rf_sub.csv,
 
-echo "----- xgbBoost on aggregate and submodels -----"
-python cpt_xgb.py
-# Output: xgb_agg.csv, xgb_sub.csv, 
+#echo "----- xgbBoost on aggregate and submodels -----"
+#python cpt_xgb.py
+# Output: xgb_agg.csv, xgb_sub.csv
 
 echo "----- logistic regression with bootstrapped AUCs on aggregate and submodels -----"
 python cpt_logit_bootstrap.py
@@ -65,10 +65,3 @@ python cpt_logit_bootstrap.py
 echo "----- plot results from models on cpt, quintiles, and cpt annotations -----"
 python generate_plots.py
 # Output: plots to save in figures folder
-
-
-
-
-
-
-

@@ -3,6 +3,8 @@ import pandas as pd
 import os
 from sklearn import metrics
 import xgboost as xgb
+from support.acc_funs import auc_decomp
+from sklearn.model_selection import GridSearchCV
 
 # DESCRIPTION: THIS SCRIPT GENERATES AUC SCORES FOR THE AGGREGATE AND SUB MODELS.
 # SAVES TO OUTPUT:
