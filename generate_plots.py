@@ -29,6 +29,23 @@ dir_figures = os.path.join(dir_base, '..', 'figures')
 # --- rf_results/auc_compare.png
 # --- xgb_results/auc_compare.png
 
+def plot_auc_decomp(read_file_1, read_file_2, plot_dir, save_file):
+    temp_sub = pd.read_csv(os.path.join(dir_output, read_file_1))
+    temp_agg = pd.read_csv(os.path.join(dir_output, read_file_2))
+
+    # create new variable to indicate if agg or sub data
+    temp_sub.insert(0, 'model', 'sub')
+    temp_agg.insert(0, 'model', 'agg')
+
+    # get outpult file
+    plot_output = os.path.join(dir_figures, plot_dir)
+    # combine data
+    dat = pd.concat([temp_agg, temp_sub], axis=0).reset_index(drop=True)
+
+    sns.catplot(x='tt', y='auc', hue='model', col='outcome', col_wrap=5, s=12, data=dat).savefig(
+        os.path.join(plot_output, save_file))
+
+
 # first make bar plot with number of cpt with 3 or more occurences. function can take outcome as input
 # second make plot with pct
 # thrid combine table and save
@@ -115,11 +132,7 @@ def get_auc(df):
 
 # -----------------------------------------------
 # FUNCTIONS FOR PLOTTING
-read_file_1='logit_sub.csv'
-read_file_2='logit_agg.csv'
-plot_dir='logit_results'
-save_file='auc_compare.png'
-generate_auc=True
+
 def plot_auc(read_file_1, read_file_2, plot_dir, save_file, generate_auc):
     # read in data
     temp_sub = pd.read_csv(os.path.join(dir_output, read_file_1))
@@ -192,6 +205,9 @@ def plot_auc_quin(read_file_1, read_file_2,  plot_dir):
 plot_auc(read_file_1='logit_sub.csv', read_file_2='logit_agg.csv', plot_dir='logit_results', save_file='auc_compare.png', generate_auc=True)
 #plot_auc(read_file_1='rf_sub.csv', read_file_2='rf_agg.csv', plot_dir='rf_results', save_file='auc_compare.png')
 #plot_auc(read_file_1='xgb_sub.csv', read_file_2='xgb_agg.csv', plot_dir='xgb_results', save_file='auc_compare.png')
+
+# PLOT AUC DECOMPOSITION
+plot_auc_decomp(read_file_1='logit_sub_model_auc_decomposed.csv', read_file_2='logit_agg_model_auc_decomposed.csv', plot_dir='logit_results', save_file='auc_decomp_compare.png')
 
 # PLOT AUC COMPARISON FOR LOGIT MODELS ON CPT TITLE GROUPS AND ORGANS
 plot_auc(read_file_1='sub_cpt_title.csv', read_file_2='agg_cpt_title.csv', plot_dir='logit_results', save_file='auc_compare_title.png', generate_auc=False)
