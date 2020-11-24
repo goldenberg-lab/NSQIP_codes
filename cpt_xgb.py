@@ -2,14 +2,21 @@ import numpy as np
 import pandas as pd
 import os
 from sklearn import metrics
-import xgboost as xgb
 from support.acc_funs import auc_decomp
 from sklearn.model_selection import GridSearchCV
+import xgboost as xgb
 
-# DESCRIPTION: THIS SCRIPT GENERATES AUC SCORES FOR THE AGGREGATE AND SUB MODELS.
+# DESCRIPTION: THIS SCRIPT SUBSETS BY THE MOST PREVALENT CPTS AND RUNS
+# A LOGISTIC REGRESSION FOR THE AGGREGATE AND SUBMODELS AND DECOMPOSES THE AUC
+# IT DOES THIS FOR BOTH THE CPT CODES AND THE CPT VALUES FROM NATIVE BAYES
+
 # SAVES TO OUTPUT:
-# --- xgb_agg.csv
-# --- xgb_sub.csv
+# --- logit_agg.csv
+# --- logit_sub.csv
+# --- logit_agg_phat.csv
+# --- logit_sub_phat.csv
+# --- logit_agg_model_auc_decomposed.csv
+# --- logit_sub_model_auc_decomposed.csv
 ###############################
 # ---- STEP 1: LOAD DATA ---- #
 dir_base = os.getcwd()
@@ -33,7 +40,7 @@ top_cpts = dat_X.groupby('cpt').size().sort_values(ascending=False)
 top_cpts = pd.DataFrame({'cpt': top_cpts.index, 'count': top_cpts.values})
 
 # KEEP ONLY CPT CODES WITH OVER 1000
-top_cpts = top_cpts[top_cpts['count'] > 100]
+top_cpts = top_cpts[top_cpts['count'] > 1000]
 top_cpts = top_cpts.cpt.unique()
 
 # SUBET BY DATA FRAMES BY CPT CODES
@@ -51,9 +58,7 @@ dat_Y.drop(dat_Y.columns[[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17
 ###############################################
 # ---- STEP 2: LEAVE-ONE-YEAR - ALL VARIABLES  ---- #
 
-# START LOOP
 holder_y_all = []
-
 for ii, vv in enumerate(cn_Y):
     print('##### ------- Outcome %s (%i of %i) -------- #####' % (vv, ii + 1, len(cn_Y)))
     tmp_ii = pd.concat([dat_Y.operyr, dat_Y[vv] == -1], axis=1)
@@ -64,39 +69,96 @@ for ii, vv in enumerate(cn_Y):
 
     holder_y = []
     for yy in tmp_train_years:
-        print('Train Year %i' % (yy))
-        idx_train = dat_X.operyr.isin(tmp_years) & (dat_X.operyr < yy)
-        idx_test = dat_X.operyr.isin(tmp_years) & (dat_X.operyr == yy)
-        Xtrain, Xtest = dat_X.loc[idx_train, cn_X].reset_index(drop=True), \
-                        dat_X.loc[idx_test, cn_X].reset_index(drop=True)
-        ytrain, ytest = dat_Y.loc[idx_train, [vv]].reset_index(drop=True), \
-                        dat_Y.loc[idx_test, [vv]].reset_index(drop=True)
+        # FOR 2013 WE DONT HAVE A VALIDATION SET TO TUNE HYPERPARAMETERS, SO USE NORMAL TRAIN, TEST SPLIT
+        if yy == 2013:
+            print('Train Year %i' % (yy))
+            idx_train = dat_X.operyr.isin(tmp_years) & (dat_X.operyr < yy)
+            idx_test = dat_X.operyr.isin(tmp_years) & (dat_X.operyr == yy)
+            Xtrain, Xtest = dat_X.loc[idx_train, cn_X].reset_index(drop=True), \
+                            dat_X.loc[idx_test, cn_X].reset_index(drop=True)
+            ytrain, ytest = dat_Y.loc[idx_train, [vv]].reset_index(drop=True), \
+                            dat_Y.loc[idx_test, [vv]].reset_index(drop=True)
 
-        # STORE CPT CODE AND DELETE FROM DATA
-        tmp_cpt = Xtest.cpt
-        del Xtrain['cpt']
-        del Xtest['cpt']
+            # STORE CPT CODES AND DELETE FROM DATA
+            tmp_cpt = Xtest.cpt
+            del Xtrain['cpt']
+            del Xtest['cpt']
 
-        # TRAIN AND GET PREDICTIONS
-        xgb_mod = xgb.XGBClassifier()
-        xgb_mod.fit(Xtrain, ytrain.values.ravel())
-        xgb_preds = xgb_mod.predict_proba(Xtest)[:,1]
+            # TRAIN MODEL WITH EACH PARAMETER
+            param_grid = {
+                'n_estimators': [400, 700, 1000],
+                'colsample_bytree': [0.7, 0.8],
+                'max_depth': [15, 20, 25],
+                'reg_alpha': [1.1, 1.2, 1.3],
+                'reg_lambda': [1.1, 1.2, 1.3],
+                'subsample': [0.7, 0.8, 0.9]
+            }
+
+        clf = GridSearchCV(xgb.XGBClassifier(), param_grid, n_jobs=6)
+        xgb_mod = clf.fit(Xtrain, ytrain.values.ravel())
+        xgb_preds = xgb_mod.predict_proba(Xtest)[:, 1]
+        else:
+            # FOR YEARS 2014-2018 WE HAVE A TRAIN, VALIDATION, AND TEST SET
+            print('Train Year %i' % (yy))
+            # get validation year
+            yy_valid = yy-1
+            idx_train = dat_X.operyr.isin(tmp_years) & (dat_X.operyr < yy_valid)
+            idx_valid = dat_X.operyr.isin(tmp_years) & (dat_X.operyr == yy_valid)
+            idx_test = dat_X.operyr.isin(tmp_years) & (dat_X.operyr == yy)
+            Xtrain, Xvalid, Xtest = dat_X.loc[idx_train, cn_X].reset_index(drop=True), \
+                                    dat_X.loc[idx_valid, cn_X].reset_index(drop=True), \
+                                    dat_X.loc[idx_test, cn_X].reset_index(drop=True)
+            ytrain, yvalid, ytest = dat_Y.loc[idx_train, [vv]].reset_index(drop=True), \
+                                    dat_Y.loc[idx_valid, [vv]].reset_index(drop=True), \
+                                    dat_Y.loc[idx_test, [vv]].reset_index(drop=True)
+
+            # STORE CPT CODES AND DELETE FROM DATA
+            tmp_cpt = Xtest.cpt
+            del Xtrain['cpt']
+            del Xtest['cpt']
+            del Xvalid['cpt']
+
+            # TRAIN A MODEL WITH EACH C VALUE AND TEST ON THE VALIDATION SET AND RETRIEVE BEST C VALUES
+            n_est= [400, 700, 1000]
+            col_samp= [0.7, 0.8]
+            m_depth= [15, 20, 25]
+            reg_alpha= [1.1, 1.2, 1.3]
+            reg_lambda= [1.1, 1.2, 1.3]
+            sub_sample= [0.7, 0.8, 0.9]
+            best_c = []
+            for e in n_est:
+                for c in col_samp:
+                    for m in m_depth:
+                        for a in reg_alpha:
+                            for l in reg_lambda:
+                                for s in sub_sample:
+                                    clf = xgb.XGBClassifier(n_estimators=e, colsample_bytree=c, max_depth=m, reg_alpha=a, reg_lambda=l,sub_sample=s,n_jobs=6)
+                                    xgb_mod = clf.fit(Xtrain, ytrain.values.ravel())
+                                    xgb_preds = xgb_mod.predict_proba(Xvalid)[:, 1]
+                                    auc_score = metrics.roc_auc_score(yvalid, xgb_preds)
+                                    best_c.append(pd.DataFrame({'n_est': e,'col_samp':c,'m_depth':m,'reg_alpha':a, 'reg_lambda':l,'sub_sample': s,'auc':auc_score}, index=[0]))
+            best_c = pd.concat(best_c)
+            best_m_depth = best_c[best_c['auc'] == max(best_c.auc)].m_depth.values
+            best_n_est = best_c[best_c['auc'] == max(best_c.auc)].n_est.values
+            best_col_samp = best_c[best_c['auc'] == max(best_c.auc)].col_samp.values
+            best_reg_alpha = best_c[best_c['auc'] == max(best_c.auc)].reg_alpha.values
+            best_reg_lambda = best_c[best_c['auc'] == max(best_c.auc)].reg_lambda.values
+            best_sub_sample = best_c[best_c['auc'] == max(best_c.auc)].sub_sample.values
+
+
+            # USE BEST C VALUE FROM LOOP
+            clf = xgb.XGBClassifier(n_estimators=int(best_n_est), colsample_bytree=float(best_col_samp), max_depth=int(best_m_depth), reg_alpha=float(best_reg_alpha),
+                                    reg_lambda=float(best_reg_lambda),sub_sample=best_sub_sample,n_jobs=6)
+            #COMBINE THE TRAIN AND VALIDATOIN SETS AND RETRAIN MODEL ON ALL DATA WITH THE BEST C VALUES
+            Xtrain = pd.concat([Xtrain, Xvalid])
+            ytrain = pd.concat([ytrain, yvalid])
+            xgb_mod = clf.fit(Xtrain, ytrain.values.ravel())
+            xgb_preds = xgb_mod.predict_proba(Xtest)[:, 1]
 
         # STORE RESULTS FROM AGGREGATE MODEL
-        tmp_holder = pd.DataFrame({'y_preds': list(xgb_preds), 'y_values': list(ytest.values), 'cpt': list(tmp_cpt)})
         within_holder = []
-
-        # LOOP THROUGH EACH CPT CODE
-        for cc in top_cpts:
-            #print('cpt %s' % (cc))
-            sub_tmp_holder = tmp_holder[tmp_holder['cpt'] == cc].reset_index(drop=True)
-            if all(sub_tmp_holder.y_values.values == 0):
-                within_holder.append(pd.DataFrame({'auc': 'NA',
-                                                   'cpt': cc}, index=[0]))
-            else:
-                within_holder.append(pd.DataFrame({'auc': metrics.roc_auc_score(list(sub_tmp_holder.y_values.values),
-                                                                                list(sub_tmp_holder.y_preds.values)),
-                                                   'cpt': cc}, index=[0]))
+        tmp_holder = pd.DataFrame({'y_preds': list(xgb_preds), 'y_values': np.array(ytest).ravel(), 'cpt': list(tmp_cpt)})
+        within_holder.append(pd.DataFrame({'y': tmp_holder.y_values, 'preds': tmp_holder.y_preds,'cpt': tmp_holder.cpt}))        # LOOP THROUGH EACH CPT CODE
 
         holder_y.append(pd.concat(within_holder).assign(test_year=yy))
     holder_y_all.append(pd.concat(holder_y).assign(outcome=vv))
@@ -104,9 +166,31 @@ for ii, vv in enumerate(cn_Y):
 res_y_all = pd.concat(holder_y_all).reset_index(drop=True)
 res_y_all.to_csv(os.path.join(dir_output, 'xgb_agg.csv'), index=False)
 
+###############################################
+# decompose auc and save
+#read_file_1 = 'logit_agg.csv'
+#res_y_all = pd.read_csv(os.path.join(dir_output, read_file_1))
+res_y_all = res_y_all.dropna().reset_index(drop=True)
+
+result_list = []
+for i in cn_Y:
+    print(i)
+    temp_list = []
+    sub_res = res_y_all[res_y_all['outcome']==i].reset_index(drop=True)
+    y_values = sub_res.y.values
+    pred_values = sub_res.preds.values
+    group_values = sub_res.cpt.values
+    agg_auc_decomp = auc_decomp(y=y_values, score=pred_values, group=group_values, rand=False)
+    temp_list.append(pd.DataFrame({'tt': agg_auc_decomp.tt, 'auc': agg_auc_decomp.auc,
+                                       'den': agg_auc_decomp.den}))
+    result_list.append(pd.concat(temp_list).assign(outcome=i))
+
+agg_model_auc = pd.concat(result_list).reset_index(drop=True)
+agg_model_auc.to_csv(os.path.join(dir_output, 'xgb_agg_model_auc_decomposed.csv'), index=False)
+
 ####################################################
 # ---- STEP 3: LEAVE-ONE-YEAR - ALL VARIABLES, FOR EACH CPT CODE, SUB MODELS---- #
-
+# run with 100 for max depth and 1000 for n_est
 holder_y_all = []
 for ii, vv in enumerate(cn_Y):
     print('##### ------- Outcome %s (%i of %i) -------- #####' % (vv, ii + 1, len(cn_Y)))
@@ -118,14 +202,27 @@ for ii, vv in enumerate(cn_Y):
 
     holder_y = []
     for yy in tmp_train_years:
-        print('Train Year %i' % (yy))
-        idx_train = dat_X.operyr.isin(tmp_years) & (dat_X.operyr < yy)
-        idx_test = dat_X.operyr.isin(tmp_years) & (dat_X.operyr == yy)
-        Xtrain, Xtest = dat_X.loc[idx_train, cn_X].reset_index(drop=True), \
-                        dat_X.loc[idx_test, cn_X].reset_index(drop=True)
-        ytrain, ytest = dat_Y.loc[idx_train, [vv]].reset_index(drop=True), \
-                        dat_Y.loc[idx_test, [vv]].reset_index(drop=True)
-
+        if yy ==2013:
+            print('Train Year %i' % (yy))
+            idx_train = dat_X.operyr.isin(tmp_years) & (dat_X.operyr < yy)
+            idx_test = dat_X.operyr.isin(tmp_years) & (dat_X.operyr == yy)
+            Xtrain, Xtest = dat_X.loc[idx_train, cn_X].reset_index(drop=True), \
+                            dat_X.loc[idx_test, cn_X].reset_index(drop=True)
+            ytrain, ytest = dat_Y.loc[idx_train, [vv]].reset_index(drop=True), \
+                            dat_Y.loc[idx_test, [vv]].reset_index(drop=True)
+        else:
+            print('Train Year %i' % (yy))
+            # get validation year
+            yy_valid = yy - 1
+            idx_train = dat_X.operyr.isin(tmp_years) & (dat_X.operyr < yy_valid)
+            idx_valid = dat_X.operyr.isin(tmp_years) & (dat_X.operyr == yy_valid)
+            idx_test = dat_X.operyr.isin(tmp_years) & (dat_X.operyr == yy)
+            Xtrain, Xvalid, Xtest = dat_X.loc[idx_train, cn_X].reset_index(drop=True), \
+                                    dat_X.loc[idx_valid, cn_X].reset_index(drop=True), \
+                                    dat_X.loc[idx_test, cn_X].reset_index(drop=True)
+            ytrain, yvalid, ytest = dat_Y.loc[idx_train, [vv]].reset_index(drop=True), \
+                                    dat_Y.loc[idx_valid, [vv]].reset_index(drop=True), \
+                                    dat_Y.loc[idx_test, [vv]].reset_index(drop=True)
         within_holder = []
         for cc in top_cpts:
             #print('cpt %s' % (cc))
@@ -137,101 +234,119 @@ for ii, vv in enumerate(cn_Y):
             sub_ytrain = ytrain[ytrain.index.isin(sub_xtrain.index)]
             sub_ytest = ytest[ytest.index.isin(sub_xtest.index)]
 
-            # REMOVE CPT COLUMN
+            # remove cpt column
             del sub_xtrain['cpt']
             del sub_xtest['cpt']
 
-            # FILL RESULTS WITH NA IF TRAIN OR TEST OUTCOMES ARE ALL ONE VALUE
-            if all(np.unique(sub_ytrain.values) == 0) or all(np.unique(sub_ytest.values) == 0):
-                within_holder.append(pd.DataFrame({'auc': 'NA',
-                                                   'cpt': cc}, index=[0]))
+            if yy==2013:
+                # conditon by year here.
+                # FILL RESULTS WITH NA IF TRAIN OR TEST OUTCOMES ARE ALL ONE VALUE
+                if all(np.unique(sub_ytrain.values) == 0) or all(np.unique(sub_ytest.values) == 0):
+                    within_holder.append(pd.DataFrame({'y': np.nan,
+                                                       'preds': np.nan,
+                                                       'cpt': np.nan}, index=[0]))
+                else:
+
+                    # TRAIN MODEL WITH EACH PARAMETER
+                    param_grid = {
+                        'n_estimators': [400, 700, 1000],
+                        'colsample_bytree': [0.7, 0.8],
+                        'max_depth': [15, 20, 25],
+                        'reg_alpha': [1.1, 1.2, 1.3],
+                        'reg_lambda': [1.1, 1.2, 1.3],
+                        'subsample': [0.7, 0.8, 0.9]
+                    }
+
+                    clf = GridSearchCV(xgb.XGBClassifier(), param_grid, n_jobs=6)
+                    xgb_mod = clf.fit(sub_xtrain, sub_ytrain.values.ravel())
+                    xgb_preds = xgb_mod.predict_proba(sub_xtest)[:, 1]
+                    cc_name = np.repeat(cc, xgb_preds.shape[0])
+                    tmp_holder = pd.DataFrame(
+                        {'y_preds': list(xgb_preds), 'y_values': np.array(sub_ytest).ravel(), 'cpt': list(cc_name)})
+                    within_holder.append(pd.DataFrame({'y': tmp_holder.y_values, 'preds': tmp_holder.y_preds,
+                                                       'cpt': tmp_holder.cpt}))  # LOOP THROUGH EACH CPT CODE
+
             else:
-                # TRAIN MODEL AND GET PREDICTIONS
-                xgb_mod = xgb.XGBClassifier()
-                xgb_mod.fit(sub_xtrain, sub_ytrain.values.ravel())
-                xgb_preds = xgb_mod.predict_proba(sub_xtest)[:, 1]
+                sub_xvalid = Xvalid[Xvalid['cpt'] == cc]
+                sub_yvalid = yvalid[yvalid.index.isin(sub_xvalid.index)]
+                del sub_xvalid['cpt']
+                # FILL RESULTS WITH NA IF TRAIN OR TEST OUTCOMES ARE ALL ONE VALUE
+                if all(np.unique(sub_ytrain.values) == 0) or all(np.unique(sub_ytest.values) == 0) or all(np.unique(sub_yvalid.values) == 0):
+                    within_holder.append(pd.DataFrame({'y': np.nan,
+                                                       'preds': np.nan,
+                                                       'cpt': np.nan}, index=[0]))
+                else:
+                    n_est = [400]
+                    col_samp = [0.7]
+                    m_depth = [15]
+                    reg_alpha = [1.1]
+                    reg_lambda = [1.1]
+                    sub_sample = [0.7]
+                    best_c = []
+                    for e in n_est:
+                        for c in col_samp:
+                            for m in m_depth:
+                                for a in reg_alpha:
+                                    for l in reg_lambda:
+                                        for s in sub_sample:
+                                            clf = xgb.XGBClassifier(n_estimators=e, colsample_bytree=c, max_depth=m,
+                                                                    reg_alpha=a, reg_lambda=l, sub_sample=s, n_jobs=6)
+                                            xgb_mod = clf.fit(sub_xtrain, sub_ytrain.values.ravel())
+                                            xgb_preds = xgb_mod.predict_proba(sub_xvalid)[:, 1]
+                                            auc_score = metrics.roc_auc_score(sub_yvalid, xgb_preds)
+                                            best_c.append(pd.DataFrame(
+                                                {'n_est': e, 'col_samp': c, 'm_depth': m, 'reg_alpha': a,
+                                                 'reg_lambda': l, 'sub_sample': s, 'auc': auc_score}, index=[0]))
+                    best_c = pd.concat(best_c)
+                    best_m_depth = best_c[best_c['auc'] == max(best_c.auc)].m_depth.values
+                    best_n_est = best_c[best_c['auc'] == max(best_c.auc)].n_est.values
+                    best_col_samp = best_c[best_c['auc'] == max(best_c.auc)].col_samp.values
+                    best_reg_alpha = best_c[best_c['auc'] == max(best_c.auc)].reg_alpha.values
+                    best_reg_lambda = best_c[best_c['auc'] == max(best_c.auc)].reg_lambda.values
+                    best_sub_sample = best_c[best_c['auc'] == max(best_c.auc)].sub_sample.values
 
-                within_holder.append(
-                    pd.DataFrame({'auc': metrics.roc_auc_score(sub_ytest.values, xgb_preds), 'cpt': cc}, index=[0]))
-
+                    # USE BEST C VALUE FROM LOOP
+                    clf = xgb.XGBClassifier(n_estimators=int(best_n_est), colsample_bytree=float(best_col_samp),
+                                            max_depth=int(best_m_depth), reg_alpha=float(best_reg_alpha),
+                                            reg_lambda=float(best_reg_lambda), sub_sample=best_sub_sample, n_jobs=6)
+                    # COMBINE THE TRAIN AND VALIDATOIN SETS AND RETRAIN MODEL ON ALL DATA WITH THE BEST C VALUES
+                    sub_xtrain = pd.concat([sub_xtrain, sub_xvalid])
+                    sub_ytrain = pd.concat([sub_ytrain, sub_yvalid])
+                    xgb_mode = clf.fit(sub_xtrain, sub_ytrain.values.ravel())
+                    xgb_preds = xgb_mod.predict_proba(sub_xtest)[:, 1]
+                    # create a vector of cc, that repeats so its the same length as the other columns in the data frame
+                    cc_name = np.repeat(cc, xgb_preds.shape[0])
+                    tmp_holder = pd.DataFrame(
+                        {'y_preds': list(xgb_preds), 'y_values': np.array(sub_ytest).ravel(), 'cpt': list(cc_name)})
+                    within_holder.append(pd.DataFrame({'y': tmp_holder.y_values, 'preds': tmp_holder.y_preds,
+                                                       'cpt': tmp_holder.cpt}))  # LOOP THROUGH EACH CPT CODE
         holder_y.append(pd.concat(within_holder).assign(test_year=yy))
     holder_y_all.append(pd.concat(holder_y).assign(outcome=vv))
 
 res_y_all = pd.concat(holder_y_all).reset_index(drop=True)
 res_y_all.to_csv(os.path.join(dir_output, 'xgb_sub.csv'), index=False)
 
-# ---------------------------- bootstrap analysis
-# compare aggregate and sub model auc
-#auc_agg = pd.read_csv(os.path.join(dir_output, 'rf_boot_agg.csv'))
-#auc_sub = pd.read_csv(os.path.join(dir_output, 'rf_boot_sub.csv'))
 
-# REMOVE ROWS WITH 0 AS AUC - THIS WAS A PLACEHOLDER FOR CPT CODES WITH NO POSITIVE VALUES
-auc_agg = auc_agg[auc_agg['boot_aucs']!=0]
-auc_sub = auc_sub[auc_sub['boot_aucs']!=0]
+###############################################
+# decompose auc and save
 
-# CREATE COLUMN TO IDENTIFY DATA
-auc_agg = auc_agg.rename(columns = {'boot_aucs': 'agg_boot_aucs'}, inplace = False)
-auc_sub = auc_sub.rename(columns = {'boot_aucs': 'sub_boot_aucs'}, inplace = False)
+#read_file_1 = 'logit_sub.csv'
+#res_y_all = pd.read_csv(os.path.join(dir_output, read_file_1))
+res_y_all = res_y_all.dropna().reset_index(drop=True)
 
-# GET LIST OF OUTCOME NAMES TO LOOP THROUGH
-outcome_list = list(auc_agg.outcome.unique())
-num_boots = 1000
-outcome_results = []
-for i in outcome_list:
+result_list = []
+for i in cn_Y:
     print(i)
-    temp_agg = auc_agg[auc_agg['outcome'] == i].reset_index(drop=True)
-    temp_sub = auc_sub[auc_sub['outcome'] == i].reset_index(drop=True)
-    year_list =np.intersect1d(temp_agg.test_year.unique(), temp_agg.test_year.unique())
-    year_results = []
-    for j in year_list:
-        print(j)
-        year_agg = temp_agg[temp_agg['test_year'] == j].reset_index(drop=True)
-        year_sub = temp_sub[temp_sub['test_year'] == j].reset_index(drop=True)
-        cpt_list = np.intersect1d(year_agg.cpt.unique(), year_sub.cpt.unique())
-        cpt_results = []
-        for k in cpt_list:
-            cpt_agg = year_agg[year_agg['cpt'] == k].reset_index(drop=True)
-            cpt_sub = year_sub[year_sub['cpt'] == k].reset_index(drop=True)
-            if cpt_sub.shape[0] == 0 or cpt_agg.shape[0] == 0:
-                cpt_results.append(pd.DataFrame(
-                    {'sig_value': 'NA', 'agg_p_value': 'NA', 'diff_p_value': 'NA', 'cpt': 'NA'},index=[0]))
-            else:
-                temp = pd.merge(cpt_agg, cpt_sub, left_index=True, right_index=True)
-                temp = temp[['sub_boot_aucs', 'agg_boot_aucs']]
-                temp['auc_diff'] = temp.sub_boot_aucs.values - temp.agg_boot_aucs.values
-                temp['agg_diff'] = temp.agg_boot_aucs.values - 0.5
-                # GET 2.5% VALUE
-                sig_value = temp.auc_diff.quantile(0.025)
-                sig_value_agg = temp.agg_diff.quantile(0.025)
-                # GENERATE PVALUES
-                agg_p_value = 1 - ((temp[temp['agg_boot_aucs'] > 0.5].shape[0]))/(temp.shape[0] +1)
-                diff_p_value = 1 - (temp[temp['auc_diff'] > 0].shape[0]) / (temp.shape[0] +1)
-                cpt_results.append(pd.DataFrame(
-                    {'sig_value_diff': sig_value, 'sig_value_agg':sig_value_agg, 'agg_p_value': agg_p_value, 'diff_p_value': diff_p_value, 'cpt': k},
-                    index=[0]))
-        year_results.append(pd.concat(cpt_results).assign(test_year=j))
-    outcome_results.append(pd.concat(year_results).assign(outcome=i))
+    temp_list = []
+    sub_res = res_y_all[res_y_all['outcome']==i].reset_index(drop=True)
+    y_values = sub_res.y.values
+    pred_values = sub_res.preds.values
+    group_values = sub_res.cpt.values
+    sub_auc_decomp = auc_decomp(y=y_values, score=pred_values, group=group_values, rand=False)
+    temp_list.append(pd.DataFrame({'tt': sub_auc_decomp.tt, 'auc': sub_auc_decomp.auc,
+                                       'den': sub_auc_decomp.den}))
+    result_list.append(pd.concat(temp_list).assign(outcome=i))
 
-sig_cpts = pd.concat(outcome_results).reset_index(drop=True)
+sub_model_auc = pd.concat(result_list).reset_index(drop=True)
+sub_model_auc.to_csv(os.path.join(dir_output, 'xgb_sub_model_auc_decomposed.csv'), index=False)
 
-# LOOP THROUGH OUTCOME AND YEAR AND GET FDR CORRECT PVALUES
-outcome_results = []
-for i in outcome_list:
-    print(i)
-    temp_sig = sig_cpts[sig_cpts['outcome'] == i].reset_index(drop=True)
-    year_list = temp_sig.test_year.unique()
-    year_results = []
-    for j in year_list:
-        print(j)
-        year_sig = temp_sig[temp_sig['test_year'] == j].reset_index(drop=True)
-        year_sig['agg_p_value_adj'] = smm.fdrcorrection(year_sig.agg_p_value.values)[1]
-        year_sig['diff_p_value_adj'] = smm.fdrcorrection(year_sig.diff_p_value.values)[1]
-        year_results.append(year_sig)
-
-    outcome_results.append(pd.concat(year_results))
-
-sig_cpts = pd.concat(outcome_results).reset_index(drop=True)
-
-#sig_cpts = sig_cpts[sig_cpts['sig_value_diff'] >0]
-#sig_cpts = sig_cpts[sig_cpts['sig_value_agg']>0]
-sig_cpts.to_csv(os.path.join(dir_output, 'xgb_sig_cpts.csv'), index=False)
