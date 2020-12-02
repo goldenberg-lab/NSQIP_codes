@@ -207,7 +207,8 @@ plot_auc(read_file_1='logit_sub.csv', read_file_2='logit_agg.csv', plot_dir='log
 #plot_auc(read_file_1='xgb_sub.csv', read_file_2='xgb_agg.csv', plot_dir='xgb_results', save_file='auc_compare.png')
 
 # PLOT AUC DECOMPOSITION
-plot_auc_decomp(read_file_1='logit_sub_model_auc_decomposed.csv', read_file_2='logit_agg_model_auc_decomposed.csv', plot_dir='logit_results', save_file='auc_decomp_compare.png')
+plot_auc_decomp(read_file_1='logit_sub_model_auc_decomposed.csv', read_file_2='logit_agg_model_auc_decomposed.csv', plot_dir='logit_results', save_file='logit_auc_decomp_compare.png')
+plot_auc_decomp(read_file_1='rf_sub_model_auc_decomposed.csv', read_file_2='rf_agg_model_auc_decomposed.csv', plot_dir='rf_results', save_file='rf_auc_decomp_compare.png')
 
 # PLOT AUC COMPARISON FOR LOGIT MODELS ON CPT TITLE GROUPS AND ORGANS
 plot_auc(read_file_1='sub_cpt_title.csv', read_file_2='agg_cpt_title.csv', plot_dir='logit_results', save_file='auc_compare_title.png', generate_auc=False)
