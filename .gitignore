@@ -1,3 +1,4 @@
 # ignore pycharm stuff
 .idea/*
 support/__pycache__
+.ipynb_*
