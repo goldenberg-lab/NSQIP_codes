@@ -33,7 +33,7 @@ def fast_auc(y,s,both=False):
 fast_decomp() is a 4x speed up of auc_decomp
 y=binary labels, s=scores, g=groups
 """
-def fast_decomp(y, s, g):
+def fast_decomp(y, s, g, ret_df=False):
     assert len(y)==len(s)==len(g)
     df = pd.DataFrame({'y':y, 's':s, 'g':g, 'r':rankdata(s)})
     # --- (i) Total AUROC --- #
@@ -48,6 +48,8 @@ def fast_decomp(y, s, g):
     df_within_n = df_within_n.merge(tmp_r.rename(columns={0:'r_s'}))
     df_within_n = df_within_n.assign(n0n1 = lambda x: x.n0 * x.n1)
     df_within_n = df_within_n.assign(auc = lambda x: (x.r_s - x.n1*(x.n1+1)/2)/x.n0n1)
+    if ret_df:
+        return df_within_n
     n_within = df_within_n.n0n1.sum()
     auc_within = np.sum(df_within_n.auc * df_within_n.n0n1) / n_within
     n_between = n_tot - n_within
