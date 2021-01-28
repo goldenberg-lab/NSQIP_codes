@@ -1,6 +1,42 @@
+import os
 import sys
 import numpy as np
 import pandas as pd
+from scipy.stats import f
+
+
+# df=qq.copy();cn_gg='gg';cn_vv='vv';cn_val='val'
+"""
+cn_gg : name of group column
+cn_vv : variable column name
+cn_val : value name to calculate variance
+"""
+def decomp_var(df, cn_gg, cn_vv, cn_val):
+    # (i) Calculate the within group sum of squares
+    res_w = df.copy().groupby([cn_vv,cn_gg]).apply(lambda x: 
+       pd.Series({'SSw':np.sum((x[cn_val]-x[cn_val].mean())**2)})).reset_index()
+    res_w = res_w.groupby(cn_vv).SSw.sum().reset_index()
+    # (ii) Calculate the between group sum of squares
+    res_b = df.copy().groupby([cn_vv,cn_gg]).apply(lambda x: 
+                     pd.Series({'xbar':x[cn_val].mean(),'n':x[cn_val].shape[0]})).reset_index()
+    res_b = res_b.merge(df.groupby(cn_vv)[cn_val].mean().reset_index().rename(columns={cn_val:'mu'}))
+    res_b = res_b.assign(SSb=lambda x: x.n*(x.xbar - x.mu)**2).groupby(cn_vv).SSb.sum().reset_index()
+    # (iii) Ensure it lines up (SStot == 0)
+    res_tot = res_w.merge(res_b).assign(SStot=lambda x: x.SSw+x.SSb)
+    # (iv) Under null of no difference between groups, should have an F-distribution after DoF adjustment
+    tmp = df.groupby(cn_vv).apply(lambda x: pd.Series({'n':x.shape[0], 'k':x[cn_gg].unique().shape[0]})).reset_index()
+    res_tot = res_tot.merge(tmp,'left',cn_vv)
+    res_tot = res_tot.assign(dof_b = lambda x: x.k - 1, dof_w=lambda x: x.n-x.k)
+    res_tot = res_tot.assign(Fstat=lambda x: (x.SSb/x.dof_b)/(x.SSw/x.dof_w))
+    res_tot['pval'] = 1 - f.cdf(res_tot.Fstat, res_tot.dof_b, res_tot.dof_w)
+    res_tot['gg'] = cn_gg
+    return res_tot
+
+
+def makeifnot(path):
+    if not os.path.exists(path):
+        print('Making path')
+        os.makedir(path)
 
 def gg_color_hue(n):
     from colorspace.colorlib import HCL
