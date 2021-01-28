@@ -1,9 +1,11 @@
 import numpy as np
 import scipy as sp
+from scipy import stats
 from scipy.stats import rankdata
 import pandas as pd
 import sys
-
+import os
+from time import time
 
 import matplotlib
 # matplotlib.use('Agg')
@@ -13,19 +15,129 @@ def stopifnot(stmt):
     if not stmt:
         sys.exit('error! Statement is not True')
 
+def gen_CI(x,se,alpha):
+    pvals = np.array([1-alpha/2, alpha/2])
+    critvals = stats.norm.ppf(pvals)
+    return pd.DataFrame({'lb':x - critvals[0]*se, 'ub':x - critvals[1]*se})
+
+def auc2se(x):
+    assert isinstance(x,pd.DataFrame)
+    assert x.columns.isin(['auc','n1','n0']).sum() == 3
+    x = x.assign(q0 = lambda x: x.auc*(1-x.auc),
+                 q1 = lambda x: x.auc/(2-x.auc) - x.auc**2,
+                 q2 = lambda x: 2*x.auc**2/(1+x.auc) - x.auc**2,
+                 n1n0=lambda x: x.n1*x.n0)
+    x = x.assign(se=lambda x: np.sqrt( (x.q0 + (x.n1-1)*x.q1 + (x.n0-1)*x.q2 ) / x.n1n0 ) )
+    return x.se.values
+
+        
+"""
+FUNCTION TO PERFORM FAST INFERENCE ON WITHIN/TOTAL AUROCs
+# i) the within AUROC is a weighted sum of the CPT AUROCs
+# ii) Use analytic formula (normal approx) to generate from total AUROC
+# iii) Use difference to get the between
+fn_find: expects two files to exist: fn_find".csv", which will have the aggregate AUROC
+         and fn_find"_cpt.csv", which will have the within breakdowns for the CPTs
+dat_base: should have the within/total/between AUROCs write_fast_decomp(...,ret_df=False)
+dat_cpt: should have the CPT breakdown for the within write_fast_decomp(...,ret_df=True)
+fn_write: file name to be written for the bootstrap
+path: folder where fn_write will be writter
+n_bs: number of bootstrap iterations
+n_max: max rows allowed for sample (for memory limits). If n_bs*n > n_max, bootstrapping will be done over several iterations
+"""
+
+# dat_base=tmp_base.copy();dat_cpt=tmp_cpt.copy();fn_write=fn_within_inf; path=dir_output;alpha=0.05;n_bs=1000; n_max=int(5e5);
+def write_fast_inference(dat_base, dat_cpt, fn_write, path, alpha=0.05, n_bs=1000, n_max=int(1e6)): 
+    cn_gg = list(dat_base.columns.drop(['tt','auc','den','n1']))
+    assert dat_cpt.columns.isin(cn_gg).sum()==len(cn_gg)
+    n_dat = dat_cpt.shape[0]
+
+    # ---- (1) BOOTSTRAP DIST ---- #
+    if fn_write in os.listdir(path):
+        print('Bootstrapped samples already exist, loading')
+        dat_bs = pd.read_csv(os.path.join(path, fn_write))
+    else:
+        print('No file found, bootstrapping')
+        # ---- (1) GET THE WITHIN DISTRIBUTION ---- #
+        n_iter = int(np.ceil(n_dat * n_bs / n_max))
+        # How many bootstraps per iterations
+        bs_per = n_bs // n_iter
+        # Begin the loop
+        stime = time()
+        holder_bs = []
+        for i in range(n_iter):
+            print('Iteration %i of %i' % (i+1, n_iter))
+            # Each cn_gg combination will have bs_per times as many rows
+            tmp_bs = dat_cpt.groupby(cn_gg).sample(frac=bs_per,replace=True,random_state=i).reset_index(None, True)
+            # Randomly index the cn_gg categories to one of bs_per bootstrap iterations
+            tmp_bs['idx'] = pd.Series(tmp_bs.groupby(cn_gg).cumcount() % bs_per).sample(frac=1, random_state=i).values
+            # Calculate weighted within AUROC
+            tmp_bs = tmp_bs.groupby(cn_gg + ['idx']).apply(lambda x: np.sum(x.auc*x.n0n1)/np.sum(x.n0n1))
+            tmp_bs = tmp_bs.reset_index().assign(n_iter = i)
+            holder_bs.append(tmp_bs)
+        print('Took %0.1f seconds to run bootstrap' % (time() - stime))
+        dat_bs = pd.concat(holder_bs).reset_index(None,True).rename(columns={0:'auc'})
+        dat_bs['bidx'] = dat_bs.groupby(cn_gg).cumcount()
+        dat_bs.drop(columns=['idx','n_iter'],inplace=True)
+        dat_bs.to_csv(os.path.join(path, fn_write),index=False)
+    pvals = np.array([alpha/2, 1-alpha/2])
+    bounds_bs = dat_bs.groupby(cn_gg).auc.quantile(pvals).reset_index()
+    bounds_bs = bounds_bs.pivot_table('auc',cn_gg,'level_'+str(len(cn_gg)))
+    bounds_bs = bounds_bs.rename(columns=dict(zip(pvals,['lb','ub']))).reset_index()
+    # Merge with point estimate
+    dat_within = dat_base.query('tt=="within"')[cn_gg+['tt','auc']].merge(bounds_bs)
+
+    # ---- (2) GET THE TOTAL AUROC DIST ---- #
+    # https://www.real-statistics.com/descriptive-statistics/roc-curve-classification-table/auc-confidence-interval/
+    # note that n1/q1 is associated with P(1 > 0)
+    critval = stats.norm.ppf(1-alpha/2)
+    dat_tot = dat_base.query('tt=="total"').assign(n0=lambda x: (x.den/x.n1).astype(int)).reset_index()
+    dat_tot = dat_tot.assign(se = auc2se(dat_tot[['auc','n1','n0']]))
+    dat_tot = dat_tot.assign(lb=lambda x: x.auc-x.se*critval, ub=lambda x: x.auc+x.se*critval)[cn_gg+['tt','auc','lb','ub']]
+    assert dat_within.shape[0] == dat_tot.shape[0]
+    dat = pd.concat([dat_tot, dat_within]).reset_index(None, True)
+    return dat
+
+
+"""
+FUNCTION TO TAKE IN RAW Y/PREDS SCORES AND DO THE DECOMPOSITION OVER ANY GROUP ORDER
+df: raw y/preds scores
+fn: filename to be saved/loaded
+cn: groups
+ret_df: whether to save group decomposition
+"""
+def write_fast_decomp(df, fn, cn, path, ret_df=False):
+    check = fn in os.listdir(path)
+    if not check:
+        print('Running fast_decomp for %s' % fn)
+        stime = time()
+        tmp = df.groupby(cn).apply(lambda x: 
+                   fast_decomp(x.y.values, x.preds.values, x.cpt.values, ret_df=ret_df))
+        print('Took %0.1f seconds to run decomp' % (time() - stime))
+        tmp = tmp.reset_index().drop(columns='level_'+str(len(cn)))
+        tmp.to_csv(os.path.join(path, fn), index=False)
+    else:
+        print('Decomposition already exists, loading: %s' % fn)
+        tmp = pd.read_csv(os.path.join(path, fn))
+    return tmp
+
+
 """
 fast_auc is a 10x speed up over auc; leveraging nlog(n) rankdata function
 """
-def fast_auc(y,s,both=False):
+def fast_auc(y,s,den=False,both=False):
+    assert not den & both
     if not all((y == 0) | (y == 1)):
         print('error, y has non-0/1'); return(None)
     n1 = sum(y)
     n0 = len(y) - n1
-    den = n0 * n1
+    n0n1 = n0 * n1
     num = sum(rankdata(s)[y == 1]) - n1*(n1+1)/2
-    auroc = num / den
-    if both:
-        return auroc, den
+    auroc = num / n0n1
+    if den:
+        return auroc, n0n1
+    elif both:
+        return auroc, n1, n0
     else:
         return auroc
 
@@ -37,7 +149,8 @@ def fast_decomp(y, s, g, ret_df=False):
     assert len(y)==len(s)==len(g)
     df = pd.DataFrame({'y':y, 's':s, 'g':g, 'r':rankdata(s)})
     # --- (i) Total AUROC --- #
-    auc_tot, n_tot = fast_auc(y, s, both=True) # will also check for errors
+    auc_tot, n1_tot, n0_tot = fast_auc(y, s, both=True) # will also check for errors
+    n_tot = n1_tot * n0_tot
     # --- (ii) Within AUROC --- #
     df_within = df.groupby('g').apply(lambda x: 
       pd.DataFrame({'y':x.y,'g':x.g,'r':rankdata(x.s)})).sort_values(['g','y'])
@@ -48,15 +161,18 @@ def fast_decomp(y, s, g, ret_df=False):
     df_within_n = df_within_n.merge(tmp_r.rename(columns={0:'r_s'}))
     df_within_n = df_within_n.assign(n0n1 = lambda x: x.n0 * x.n1)
     df_within_n = df_within_n.assign(auc = lambda x: (x.r_s - x.n1*(x.n1+1)/2)/x.n0n1)
+    n1_within = df_within_n.n1.sum()
     if ret_df:
         return df_within_n
     n_within = df_within_n.n0n1.sum()
     auc_within = np.sum(df_within_n.auc * df_within_n.n0n1) / n_within
     n_between = n_tot - n_within
+    n1_between = n1_tot - n1_within
     auc_between = (n_tot/n_between)*(auc_tot - auc_within*(n_within/n_tot))
     res = pd.DataFrame({'tt':['total','within','between'],
                        'auc':[auc_tot, auc_within, auc_between],
-                       'den':[n_tot, n_within, n_between]})
+                       'den':[n_tot, n_within, n_between],
+                        'n1':[n1_tot, n1_within, n1_between]})
     return res
 
 # X = X_df[cX].copy();
