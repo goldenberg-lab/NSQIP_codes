@@ -9,34 +9,6 @@ dir_base = os.getcwd()
 dir_output = os.path.join(dir_base,'..','output')
 sf.stopifnot(all([os.path.exists(x) for x in [dir_output]]))
 
-################################################################
-# ------ (1) LOAD DATA AND REMOVE OVERLY MISSING LABELS ------ #
-
-# load in the processed labels
-dat = pd.read_csv(os.path.join(dir_output, 'y_bin.csv'))
-cn_Y = list(dat.columns[2:])
-missing_Y = dat.melt('operyr',cn_Y)
-missing_Y['value'] = (missing_Y.value==-1)
-missing_Y = missing_Y.groupby(list(missing_Y.columns)).size().reset_index()
-missing_Y = missing_Y.pivot_table(values=0,index=['operyr','variable'],columns='value').reset_index().fillna(0)
-missing_Y.columns = ['operyr','cn','complete','missing']
-missing_Y[['complete','missing']] = missing_Y[['complete','missing']].astype(int)
-missing_Y['prop'] = missing_Y.missing / missing_Y[['complete','missing']].sum(axis=1)
-#print(missing_Y[missing_Y.prop > 0].sort_values(['cn','operyr']).reset_index(drop=True))
-tmp = missing_Y[missing_Y.prop > 0].cn.value_counts().reset_index()
-tmp_drop = tmp[tmp.cn > 2]['index'].to_list()
-# Remove outcomes missing is two or more years
-print('Dropping columns: %s (>2 years of >0%% missing)' % ', '.join(tmp_drop))
-dat.drop(columns=tmp_drop,inplace=True)
-# Remove any Y's that have less than 100 events in 6 years
-tmp = dat.iloc[:,2:].apply(lambda x: x[~(x==-1)].sum() ,axis=0).reset_index().rename(columns={0:'n'})
-tmp_drop = tmp[tmp.n < 100]['index'].to_list()
-print('Dropping columns: %s (<100 events in 6 years)' % ', '.join(tmp_drop))
-dat.drop(columns=tmp_drop,inplace=True)
-cn_Y = list(dat.columns[2:])
-
-##################################################
-# ------ (2) DEFINE THE LABEL AGGREGATORS ------ #
 
 di_lbls = {'cdarrest':'cardiac arrest',
             'cnscva':'CVA, stroke or hemorrhage',
@@ -61,7 +33,6 @@ di_lbls = {'cdarrest':'cardiac arrest',
             'supinfec':'occurrences superficial incisional SSI',
             'urninfec':'urinary tract infection',
             'wndinfd':'deep incisional SSI'}
-sf.stopifnot(len(np.setdiff1d(cn_Y,pd.Series(list(di_lbls.keys()))))==0)
 
 di_agg = {'nsi1':['othsysep','othseshock'], # non-site infection
           'nsi2':['othsysep','othseshock','urninfec'],
@@ -75,6 +46,39 @@ di_agg = {'nsi1':['othsysep','othseshock'], # non-site infection
           'unplan1':['readmission1','reoperation'],
           'unplan2':['readmission1','reoperation','reintub'],
           'cns':['cnscva','cszre','civhg']}
+
+################################################################
+# ------ (1) LOAD DATA AND REMOVE OVERLY MISSING LABELS ------ #
+
+# load in the processed labels
+dat = pd.read_csv(os.path.join(dir_output, 'y_bin.csv'))
+cn_Y = list(dat.columns[2:])
+
+missing_Y = dat.melt('operyr',cn_Y)
+missing_Y['value'] = (missing_Y.value==-1)
+missing_Y = missing_Y.groupby(list(missing_Y.columns)).size().reset_index()
+missing_Y = missing_Y.pivot_table(values=0,index=['operyr','variable'],columns='value').reset_index().fillna(0)
+missing_Y.columns = ['operyr','cn','complete','missing']
+missing_Y[['complete','missing']] = missing_Y[['complete','missing']].astype(int)
+missing_Y['prop'] = missing_Y.missing / missing_Y[['complete','missing']].sum(axis=1)
+#print(missing_Y[missing_Y.prop > 0].sort_values(['cn','operyr']).reset_index(drop=True))
+tmp = missing_Y[missing_Y.prop > 0].cn.value_counts().reset_index()
+tmp_drop = tmp[tmp.cn > 2]['index'].to_list()
+# Remove outcomes missing is two or more years
+print('Dropping columns: %s (>2 years of >0%% missing)' % ', '.join(tmp_drop))
+dat.drop(columns=tmp_drop,inplace=True)
+# Remove any Y's that have less than 100 events in 6 years
+tmp = dat.iloc[:,2:].apply(lambda x: x[~(x==-1)].sum() ,axis=0).reset_index().rename(columns={0:'n'})
+tmp_drop = tmp[tmp.n < 100]['index'].to_list()
+print('Dropping columns: %s (<100 events in 6 years)' % ', '.join(tmp_drop))
+dat.drop(columns=tmp_drop,inplace=True)
+cn_Y = list(dat.columns[2:])
+
+sf.stopifnot(len(np.setdiff1d(cn_Y,pd.Series(list(di_lbls.keys()))))==0)
+
+##################################################
+# ------ (2) DEFINE THE LABEL AGGREGATORS ------ #
+
 
 
 # Loop through
