@@ -100,16 +100,21 @@ df_maizlin = pd.DataFrame.from_dict(di_maizlin,orient='index').reset_index().ren
 df_maizlin = dat_auc_both.merge(df_maizlin).drop(columns='outcome').melt('lbl',None,'tt')
 # Make a plot
 tit = 'Decomposition of within vs overall AUROC score\nWithin AUROC is average over all CPT codes'
-di_lblz = {'auc_agg':'AUROC-Overall', 'auc_within':'AUROC-within',
-           'auc_nb':'AUROC-NB', 'auc_maizlin':'AUROC-Maizlin'}
-colz = gg_color_hue(3) + ['black']
-gg_maizlin = (ggplot(df_maizlin.assign(tt=lambda x: x.tt.map(di_lblz)), aes(x='lbl',y='value',color='tt')) +
+di_lblz = {'auc_agg':'AUROC (ours)', 'auc_within':'within-AUROC (ours)',
+           'auc_nb':'AUROC-NB', 'auc_maizlin':'AUROC (Maizlin)'}
+colz = gg_color_hue(2) + ['black']
+tmp_df = df_maizlin.assign(tt=lambda x: x.tt.map(di_lblz)).query('tt!="AUROC-NB"')
+gg_maizlin = (ggplot(tmp_df, aes(x='lbl',y='value',color='tt')) +
               theme_bw() + geom_point(size=2,position=position_dodge(0.5)) +
-              ggtitle(tit) +
+              ggtitle(tit) + labs(y='AUROC') +
               theme(axis_text_x=element_text(angle=45),axis_title_x=element_blank()) +
               scale_color_manual(name='AUROC', values=colz) +
-              geom_hline(yintercept=0.5, linetype='--'))
+              geom_hline(yintercept=0.5, linetype='--') +
+              scale_y_continuous(limits=[0.49,1]))
 gg_maizlin.save(os.path.join(dir_figures,'gg_maizlin.png'),height=4,width=6)
+
+qq = df_maizlin.assign(value=lambda x: x.value-0.5).pivot('lbl','tt','value')
+qq.assign(share=lambda x: x.auc_within/x.auc_agg).share.mean()
 
 # # AUC by year
 # dat_auc_yr
