@@ -1,4 +1,4 @@
-#!/hpf/tools/centos6/python/3.7.6_benbrew/bin/python3
+#!/hpf/tools/centos7/python/3.7.6/bin/python3
 
 import argparse
 parser = argparse.ArgumentParser()
@@ -11,6 +11,11 @@ import pandas as pd
 import os
 from sklearn import metrics
 from sklearn.linear_model import LogisticRegression
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+import pickle
+
 # DESCRIPTION: THIS SCRIPT SUBSETS BY THE MOST PREVALENT CPTS AND RUNS
 # A LOGISTIC REGRESSION FOR THE AGGREGATE AND SUBMODELS AND DECOMPOSES THE AUC
 # IT DOES THIS FOR BOTH THE CPT CODES AND THE CPT VALUES FROM NATIVE BAYES
@@ -23,10 +28,11 @@ from sklearn.linear_model import LogisticRegression
 # --- logit_sub_model_auc_decomposed.csv
 ###############################
 # ---- STEP 1: LOAD DATA ---- #
-dir_base = '/hpf/largeprojects/agoldenb/ben/Projects/nsqip/NSQIP_codes'
-#dir_base = os.getcwd()
+dir_base = dir_base = '/hpf/largeprojects/agoldenb/ben/Projects/nsqip/NSQIP_codes'
 dir_output_test = os.path.join(dir_base, '..', 'logit_results/test_auc')
 dir_output_validation = os.path.join(dir_base, '..', 'logit_results/validation_auc')
+dir_output_sub_models = os.path.join(dir_base, '..', 'logit_results/sub_models') # here
+dir_output_agg_models = os.path.join(dir_base, '..', 'logit_results/agg_models') # here
 dir_data =os.path.join(dir_base, '..', 'output')
 dir_figures = os.path.join(dir_base, '..', 'figures')
 fn_X = 'X_imputed.csv'
@@ -34,7 +40,7 @@ fn_Y = 'y_agg.csv'
 dat_X = pd.read_csv(os.path.join(dir_data, fn_X))
 dat_Y = pd.read_csv(os.path.join(dir_data, fn_Y))
 # CREATE DUMMY VARIABLES FOR NON NUMERIC
-dat_X = pd.get_dummies(dat_X)
+#dat_X = pd.get_dummies(dat_X)
 # !! ENCODE CPT AS CATEGORICAL !! #
 dat_X['cpt'] = 'c' + dat_X.cpt.astype(str)
 # GROUPBY CPT AND GET NUMBER OF OBSERVATIONS
@@ -48,10 +54,13 @@ dat_X = dat_X[dat_X.cpt.isin(top_cpts)].reset_index(drop=True)
 dat_Y = dat_Y[dat_Y.caseid.isin(dat_X.caseid)].reset_index(drop=True)
 # GET COLUMNS
 cn_X = list(dat_X.columns[2:])
+cn_X.append('caseid') # here
 cn_Y = list(dat_Y.columns[25:37])
 # DELETE NON AGG LABELS
 dat_Y.drop(dat_Y.columns[[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]],
            axis=1, inplace=True)
+
+
 ###############################################
 # ---- STEP 2: LEAVE-ONE-YEAR - ALL VARIABLES  ---- #
 holder_y_all = []
@@ -77,13 +86,33 @@ for ii, vv in enumerate(cn_Y):
                             dat_Y.loc[idx_test, [vv]].reset_index(drop=True)
             # STORE CPT CODES AND DELETE FROM DATA
             tmp_cpt = Xtest.cpt
+            tmp_id = Xtest.caseid
+
             del Xtrain['cpt']
             del Xtest['cpt']
+            del Xtrain['caseid']  # here
+            del Xtest['caseid']  # here
+
+            # define the numeric variables and standard scaler
+            scaler = StandardScaler()
+            num_vars = list(['age_days', 'height', 'weight', 'workrvu'])
+            # get cateogrical variable names and onehotencoder
+            ohe = OneHotEncoder(handle_unknown='ignore')
+            cat_vars = [i for i in Xtrain.columns if i not in num_vars]
+            # define the preprocessor
+            preprocessor = ColumnTransformer(
+                transformers=[
+                    ('num', scaler, num_vars),
+                    ('cat', ohe, cat_vars)])
+
+            clf = Pipeline(steps=[('preprocessor', preprocessor),
+                                  ('classifier', LogisticRegression(penalty='l2', C=c_value,solver='liblinear', max_iter=200))])
             # TRAIN MODEL WITH EACH PARAMETER
-            clf = LogisticRegression(penalty='l2', C=c_value,solver='liblinear', max_iter=200)
-            logisiticreg = clf.fit(Xtrain, ytrain.values.ravel())
-            logit_preds = logisiticreg.predict_proba(Xtest)[:, 1]
+            logit_mod = clf.fit(Xtrain, ytrain.values.ravel())
+            logit_preds = logit_mod.predict_proba(Xtest)[:, 1]
             auc_score=np.nan
+            model_file_name = os.path.join(dir_output_agg_models, 'logit_agg_' + str(c_value) + '_' + str(vv) + '_' + str(yy) + '.sav')
+            pickle.dump(logit_mod, open(model_file_name, 'wb'))
         else:
             # FOR YEARS 2014-2018 WE HAVE A TRAIN, VALIDATION, AND TEST SET
             print('Train Year %i' % (yy))
@@ -100,28 +129,56 @@ for ii, vv in enumerate(cn_Y):
                                     dat_Y.loc[idx_test, [vv]].reset_index(drop=True)
             # STORE CPT CODES AND DELETE FROM DATA
             tmp_cpt = Xtest.cpt
+            tmp_id = Xtest.caseid
             del Xtrain['cpt']
             del Xtest['cpt']
             del Xvalid['cpt']
-            # TRAIN A MODEL WITH EACH C VALUE AND TEST ON THE VALIDATION SET AND RETRIEVE BEST C VALUES
-            clf = LogisticRegression(penalty='l2', C=c_value,solver='liblinear', max_iter=200)
-            logisiticreg = clf.fit(Xtrain, ytrain.values.ravel())
-            logit_preds = logisiticreg.predict_proba(Xvalid)[:, 1]
+            del Xtrain['caseid']
+            del Xtest['caseid']
+            del Xvalid['caseid']
+            # define the numeric variables and standard scaler
+            scaler = StandardScaler()
+            num_vars = list(['age_days', 'height', 'weight', 'workrvu'])
+            # get cateogrical variable names and onehotencoder
+            ohe = OneHotEncoder(handle_unknown='ignore')
+            cat_vars = [i for i in Xtrain.columns if i not in num_vars]
+            # define the preprocessor
+            preprocessor = ColumnTransformer(
+                transformers=[
+                    ('num', scaler, num_vars),
+                    ('cat', ohe, cat_vars)])
+
+            clf = Pipeline(steps=[('preprocessor', preprocessor),
+                                  ('classifier',
+                                   LogisticRegression(penalty='l2', C=c_value, solver='liblinear', max_iter=200))])
+            logit_mod = clf.fit(Xtrain, ytrain.values.ravel())
+            logit_preds = logit_mod.predict_proba(Xvalid)[:, 1]
             auc_score = metrics.roc_auc_score(yvalid, logit_preds)
-            # USE BEST C VALUE FROM LOOP
-            clf = LogisticRegression(penalty='l2', C=c_value, solver='liblinear', max_iter=200)
             #COMBINE THE TRAIN AND VALIDATOIN SETS AND RETRAIN MODEL ON ALL DATA WITH THE BEST C VALUES
             Xtrain = pd.concat([Xtrain, Xvalid])
             ytrain = pd.concat([ytrain, yvalid])
-            logisiticreg = clf.fit(Xtrain, ytrain.values.ravel())
-            logit_preds = logisiticreg.predict_proba(Xtest)[:, 1]
+            logit_mod = clf.fit(Xtrain, ytrain.values.ravel())
+            logit_preds = logit_mod.predict_proba(Xtest)[:, 1]
+            model_file_name = os.path.join(dir_output_agg_models, 'logit_agg_' + str(c_value) + '_' + str(vv) + '_' + str(yy) + '.sav')
+            pickle.dump(logit_mod, open(model_file_name, 'wb'))
+            if yy == 2018:
+                # combine all years in to one dataset
+                Xtrain = pd.concat([Xtrain, Xtest])
+                ytrain = pd.concat([ytrain, ytest])
+                logit_mod = clf.fit(Xtrain, ytrain.values.ravel())
+                model_file_name = os.path.join(dir_output_agg_models, 'logit_agg_final_' + str(c_value) + '_' + str(vv) + '.sav')
+                pickle.dump(logit_mod, open(model_file_name, 'wb'))
         # STORE RESULTS FROM AGGREGATE MODEL
         within_holder = []
         valid_holder =[]
         tmp_holder_valid = pd.DataFrame({'c': c_value, 'auc': auc_score}, index=[0])
-        tmp_holder = pd.DataFrame({'y_preds': list(logit_preds), 'y_values': np.array(ytest).ravel(), 'cpt': list(tmp_cpt)})
         valid_holder.append(pd.DataFrame({'c':tmp_holder_valid.c.values, 'auc_valid':tmp_holder_valid.auc.values}))
-        within_holder.append(pd.DataFrame({'y': tmp_holder.y_values, 'preds': tmp_holder.y_preds,'cpt': tmp_holder.cpt}))        # LOOP THROUGH EACH CPT CODE
+        tmp_holder = pd.DataFrame(
+            {'caseid': list(tmp_id), 'y_preds': list(logit_preds), 'y_values': np.array(ytest).ravel(),
+             'cpt': list(tmp_cpt)})
+        within_holder.append(pd.DataFrame(
+            {'caseid': tmp_holder.caseid, 'y': tmp_holder.y_values, 'preds': tmp_holder.y_preds,
+             'cpt': tmp_holder.cpt}))
         holder_y.append(pd.concat(within_holder).assign(test_year=yy))
         holder_y_valid.append(pd.concat(valid_holder).assign(test_year=yy))
     holder_y_all.append(pd.concat(holder_y).assign(outcome=vv))
@@ -170,6 +227,7 @@ for ii, vv in enumerate(cn_Y):
                                     dat_Y.loc[idx_test, [vv]].reset_index(drop=True)
         within_holder = []
         valid_holder = []
+        tmp_id = Xtest.caseid.to_frame().join(Xtest.cpt)
         for cc in top_cpts:
             #print('cpt %s' % (cc))
             # SUBSET XTRAIN AND XTEST BY CPT CODE
@@ -181,22 +239,45 @@ for ii, vv in enumerate(cn_Y):
             # remove cpt column
             del sub_xtrain['cpt']
             del sub_xtest['cpt']
+            tmp_id_sub = tmp_id[tmp_id['cpt'] == cc]
+            caseids = tmp_id_sub.caseid
             if yy==2013:
                 # conditon by year here.
                 # FILL RESULTS WITH NA IF TRAIN OR TEST OUTCOMES ARE ALL ONE VALUE
                 if all(np.unique(sub_ytrain.values) == 0) or all(np.unique(sub_ytest.values) == 0):
-                    within_holder.append(pd.DataFrame({'y': np.nan,
+                    within_holder.append(pd.DataFrame({'caseid':np.nan,
+                                                       'y': np.nan,
                                                        'preds': np.nan,
                                                        'cpt': np.nan}, index=[0]))
                 else:
-                    # grid search
-                    clf = LogisticRegression(penalty='l2',C=c_value, solver='liblinear', max_iter=200)
-                    logisiticreg = clf.fit(sub_xtrain, sub_ytrain.values.ravel())
-                    logit_preds = logisiticreg.predict_proba(sub_xtest)[:, 1]
+                    # define the numeric variables and standard scaler
+                    scaler = StandardScaler()
+                    num_vars = list(['age_days', 'height', 'weight', 'workrvu'])
+                    # get cateogrical variable names and onehotencoder
+                    ohe = OneHotEncoder(handle_unknown='ignore')
+                    cat_vars = [i for i in sub_xtrain.columns if i not in num_vars]
+                    # define the preprocessor
+                    preprocessor = ColumnTransformer(
+                        transformers=[
+                            ('num', scaler, num_vars),
+                            ('cat', ohe, cat_vars)])
+
+                    clf = Pipeline(steps=[('preprocessor', preprocessor),
+                                          ('classifier',
+                                           LogisticRegression(penalty='l2', C=c_value, solver='liblinear',
+                                                              max_iter=200))])
+                    logit_mod = clf.fit(sub_xtrain, sub_ytrain.values.ravel())
+                    logit_preds = logit_mod.predict_proba(sub_xtest)[:, 1]
                     cc_name = np.repeat(cc, logit_preds.shape[0])
-                    tmp_holder = pd.DataFrame({'y_preds': list(logit_preds), 'y_values': np.array(sub_ytest).ravel(), 'cpt': list(cc_name)})
-                    within_holder.append(pd.DataFrame({'y': tmp_holder.y_values, 'preds': tmp_holder.y_preds,
-                                                       'cpt': tmp_holder.cpt}))  # LOOP THROUGH EACH CPT CODE
+                    model_file_name = os.path.join(dir_output_sub_models,
+                                                   'logit_sub_' + str(c_value) + '_' + str(vv) + '_' + str(yy) + '_' + str(cc) + '.sav')
+                    pickle.dump(logit_mod, open(model_file_name, 'wb'))
+                    tmp_holder = pd.DataFrame(
+                        {'caseid': list(caseids), 'y_preds': list(logit_preds), 'y_values': np.array(sub_ytest).ravel(),
+                         'cpt': list(cc_name)})
+                    within_holder.append(pd.DataFrame(
+                        {'caseid': tmp_holder.caseid, 'y': tmp_holder.y_values, 'preds': tmp_holder.y_preds,
+                         'cpt': tmp_holder.cpt}))  # LOOP THROUGH EACH CPT CODE
                     tmp_holder_valid = pd.DataFrame({'c': c_value, 'auc': np.nan, 'cpt':cc}, index=[0])
                     valid_holder.append( pd.DataFrame({'c': tmp_holder_valid.c.values, 'auc_valid': tmp_holder_valid.auc.values, 'cpt':tmp_holder_valid.cpt}))
             else:
@@ -205,31 +286,58 @@ for ii, vv in enumerate(cn_Y):
                 del sub_xvalid['cpt']
                 # FILL RESULTS WITH NA IF TRAIN OR TEST OUTCOMES ARE ALL ONE VALUE
                 if all(np.unique(sub_ytrain.values) == 0) or all(np.unique(sub_ytest.values) == 0) or all(np.unique(sub_yvalid.values) == 0):
-                    within_holder.append(pd.DataFrame({'y': np.nan,
+                    within_holder.append(pd.DataFrame({'caseid':np.nan,'y': np.nan,
                                                        'preds': np.nan,
                                                        'cpt': np.nan}, index=[0]))
                 else:
-                    # TRAIN A MODEL WITH EACH C VALUE AND TEST ON THE VALIDATION SET AND RETRIEVE BEST C VALUES
-                    clf = LogisticRegression(penalty='l2', C=c_value, solver='liblinear', max_iter=200)
-                    logisiticreg = clf.fit(sub_xtrain, sub_ytrain.values.ravel())
-                    logit_preds = logisiticreg.predict_proba(sub_xvalid)[:, 1]
+                    # define the numeric variables and standard scaler
+                    scaler = StandardScaler()
+                    num_vars = list(['age_days', 'height', 'weight', 'workrvu'])
+                    # get cateogrical variable names and onehotencoder
+                    ohe = OneHotEncoder(handle_unknown='ignore')
+                    cat_vars = [i for i in sub_xtrain.columns if i not in num_vars]
+                    # define the preprocessor
+                    preprocessor = ColumnTransformer(
+                        transformers=[
+                            ('num', scaler, num_vars),
+                            ('cat', ohe, cat_vars)])
+
+                    clf = Pipeline(steps=[('preprocessor', preprocessor),
+                                          ('classifier',
+                                           LogisticRegression(penalty='l2', C=c_value, solver='liblinear',
+                                                              max_iter=200))])
+                    logit_mod= clf.fit(sub_xtrain, sub_ytrain.values.ravel())
+                    logit_preds = logit_mod.predict_proba(sub_xvalid)[:, 1]
                     auc_score = metrics.roc_auc_score(sub_yvalid, logit_preds)
 
-                    # USE BEST C VALUE FROM LOOP
-                    clf = LogisticRegression(penalty='l2', C=float(c_value), solver='liblinear', max_iter=500)
                     # COMBINE THE TRAIN AND VALIDATOIN SETS AND RETRAIN MODEL ON ALL DATA WITH THE BEST C VALUES
                     sub_xtrain = pd.concat([sub_xtrain, sub_xvalid])
                     sub_ytrain = pd.concat([sub_ytrain, sub_yvalid])
-                    logisiticreg = clf.fit(sub_xtrain, sub_ytrain.values.ravel())
-                    logit_preds = logisiticreg.predict_proba(sub_xtest)[:, 1]
+                    logit_mod = clf.fit(sub_xtrain, sub_ytrain.values.ravel())
+                    logit_preds = logit_mod.predict_proba(sub_xtest)[:, 1]
 
                     # create a vector of cc, that repeats so its the same length as the other columns in the data frame
                     cc_name = np.repeat(cc, logit_preds.shape[0])
+                    model_file_name = os.path.join(dir_output_sub_models,
+                                                   'logit_sub_' + str(c_value) + '_' + str(vv) + '_' + str(yy) + '_' + str(cc) + '.sav')
+                    pickle.dump(logit_mod, open(model_file_name, 'wb'))
                     tmp_holder_valid = pd.DataFrame({'c': c_value, 'auc': auc_score, 'cpt':cc}, index=[0])
                     valid_holder.append(pd.DataFrame({'c': tmp_holder_valid.c.values, 'auc_valid': tmp_holder_valid.auc.values, 'cpt':tmp_holder_valid.cpt}))
-                    tmp_holder = pd.DataFrame( {'y_preds': list(logit_preds), 'y_values': np.array(sub_ytest).ravel(), 'cpt': list(cc_name)})
-                    within_holder.append(pd.DataFrame({'y': tmp_holder.y_values, 'preds': tmp_holder.y_preds,
-                                                       'cpt': tmp_holder.cpt}))  # LOOP THROUGH EACH CPT CODE
+                    tmp_holder = pd.DataFrame(
+                        {'caseid': list(caseids), 'y_preds': list(logit_preds), 'y_values': np.array(sub_ytest).ravel(),
+                         'cpt': list(cc_name)})
+                    within_holder.append(pd.DataFrame(
+                        {'caseid': tmp_holder.caseid, 'y': tmp_holder.y_values, 'preds': tmp_holder.y_preds,
+                         'cpt': tmp_holder.cpt}))  # LOOP THROUGH EACH CPT CODE
+                    # get full model
+                    if yy == 2018:
+                        # combine all years in to one dataset
+                        sub_xtrain = pd.concat([sub_xtrain, sub_xtest])
+                        sub_ytrain = pd.concat([sub_ytrain, sub_ytest])
+                        xgb_mod_full = clf.fit(sub_xtrain, sub_ytrain.values.ravel())
+                        model_file_name = os.path.join(dir_output_sub_models,
+                                                       'logit_sub_final_' + str(c_value) + '_' + str(vv) + '_' + str(cc) + '.sav')
+                        pickle.dump(xgb_mod_full, open(model_file_name, 'wb'))
         holder_y.append(pd.concat(within_holder).assign(test_year=yy))
         holder_y_valid.append(pd.concat(valid_holder).assign(test_year=yy))
 
