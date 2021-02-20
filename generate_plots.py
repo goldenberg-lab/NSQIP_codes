@@ -29,6 +29,64 @@ dir_figures = os.path.join(dir_base, '..', 'figures')
 # --- rf_results/auc_compare.png
 # --- xgb_results/auc_compare.png
 
+def plot_outcome_counts(read_file_1, read_file_2, save_file, plot_dir):
+    temp_sub = pd.read_csv(os.path.join(dir_output, read_file_1))
+    temp_agg = pd.read_csv(os.path.join(dir_output, read_file_2))
+    temp_sub = recode_outcome(temp_sub)
+    temp_agg = recode_outcome(temp_agg)
+    plot_output = os.path.join(dir_figures, plot_dir)
+    dat = pd.concat([temp_agg, temp_sub], axis=0).reset_index(drop=True)
+    dat = dat.groupby(['outcome', 'model']).size().reset_index(name='counts')
+    img = sns.barplot(x='outcome', y='counts', hue='model', data=dat).get_figure()
+    img.tight_layout()
+    img.axes[0].yaxis.get_major_formatter().set_scientific(False)
+    img.savefig(os.path.join(plot_output, save_file))
+    img.clf()
+
+
+def subset_agg(temp_sub, temp_agg):
+
+    # loop through outcome, year, cpt and fill agg with NA outcome/year/cpt dont exist in sub models
+    outcome_list = ['agg_nsi1', 'agg_nsi2', 'agg_nsi3', 'agg_nsi4', 'agg_ssi1', 'agg_ssi2', 'agg_aki', 'agg_adv1', 'agg_adv2', 'agg_unplan1', 'agg_unplan2', 'agg_cns']
+    # outcome_list = ['nSSIs', 'SSIs', 'ADV', 'UPLN', 'CNS', 'AKI']
+    year_list = [2014, 2015, 2016, 2017, 2018]
+
+    # here try to figure out why after removing cpts from agg that it's still not the same size as sub.
+    outcome_data=[]
+    for o in outcome_list:
+        sub_outcome = temp_sub[temp_sub['outcome']== o]
+        agg_outcome = temp_agg[temp_agg['outcome']==o]
+        year_data = []
+        for y in year_list:
+            sub_year = sub_outcome[sub_outcome['test_year']==y]
+            agg_year = agg_outcome[agg_outcome['test_year']==y]
+
+            # get unique cpt from each dataset
+            sub_cpt = sub_year.caseid.unique()
+            agg_year = agg_year[agg_year.caseid.isin(sub_cpt)].reset_index(drop=True)
+            year_data.append(agg_year)
+        year_data = pd.concat(year_data)
+        outcome_data.append(year_data)
+    new_agg = pd.concat(outcome_data)
+    return new_agg
+
+
+def recode_outcome(temp_dat):
+    # recode outcome
+    temp_dat['outcome'] = np.where(temp_dat['outcome'] == "agg_ssi1", 'SSIs',
+                                   np.where(temp_dat['outcome'] == 'agg_ssi2', 'SSIs',
+                                            np.where(temp_dat['outcome'] == 'agg_adv1', 'ADV',
+                                                     np.where(temp_dat['outcome'] == 'agg_adv2', 'ADV',
+                                                              np.where(temp_dat['outcome'] == 'agg_nsi1', 'nSSIs',
+                                                                       np.where(temp_dat['outcome'] == 'agg_nsi2', 'nSSIs',
+                                                                                np.where(temp_dat['outcome'] == 'agg_nsi3', 'nSSIs',
+                                                                                         np.where(temp_dat['outcome']== 'agg_nsi4', 'nSSIs',
+                                                                                                  np.where(temp_dat['outcome']  == 'agg_unplan1', 'UPLN',
+                                                                                                           np.where(temp_dat['outcome'] == 'agg_unplan2', 'UPLN',
+                                                                                                                    np.where(temp_dat['outcome']  == 'agg_cns', 'CNS', 'AKI')))))))))))
+    return temp_dat
+
+
 def plot_auc_decomp(read_file_1, read_file_2, plot_dir, save_file):
     temp_sub = pd.read_csv(os.path.join(dir_output, read_file_1))
     temp_agg = pd.read_csv(os.path.join(dir_output, read_file_2))
@@ -127,16 +185,24 @@ def auc_group(df):
 def get_auc(df):
     df = df.dropna().reset_index(drop=True)
     #df['y'] = df['y'].str.strip('[]').astype(int)
-    df = df.groupby(['outcome', 'test_year', 'cpt']).apply(auc_group).reset_index().rename(columns={0: 'auc'})
+    #df = df.groupby(['outcome', 'test_year', 'cpt']).apply(auc_group).reset_index().rename(columns={0: 'auc'})
+    df = df.groupby(['outcome', 'cpt']).apply(auc_group).reset_index().rename(columns={0: 'auc'})
+
     return df
 
 # -----------------------------------------------
 # FUNCTIONS FOR PLOTTING
-
 def plot_auc(read_file_1, read_file_2, plot_dir, save_file, generate_auc):
     # read in data
     temp_sub = pd.read_csv(os.path.join(dir_output, read_file_1))
     temp_agg = pd.read_csv(os.path.join(dir_output, read_file_2))
+
+    #subset agg model to match sub models
+    temp_agg = subset_agg(temp_sub=temp_sub, temp_agg=temp_agg)
+
+    # recode outcome
+    temp_agg= recode_outcome(temp_dat=temp_agg)
+    temp_sub = recode_outcome(temp_dat=temp_sub)
 
     if generate_auc:
         # get auc
@@ -155,8 +221,8 @@ def plot_auc(read_file_1, read_file_2, plot_dir, save_file, generate_auc):
     plot_output = os.path.join(dir_figures, plot_dir)
     # combine data
     dat = pd.concat([temp_agg, temp_sub], axis=0).reset_index(drop=True)
-    sns.catplot(x='test_year', y='auc', hue='model',
-                kind='violin', col='outcome', col_wrap=5, data=dat).savefig(os.path.join(plot_output, save_file))
+    sns.catplot(x='outcome', y='auc', hue='model',
+                kind='violin',  data=dat).savefig(os.path.join(plot_output, save_file))
 
 def clean_quin(temp_quin):
     del temp_quin['num_obs']
@@ -202,9 +268,9 @@ def plot_auc_quin(read_file_1, read_file_2,  plot_dir):
 # -----------------------------------------------
 
 # PLOT AUC COMPARISON FOR LOGIT, RANDOMFOREST, AND XGB BOOST
-plot_auc(read_file_1='logit_sub.csv', read_file_2='logit_agg.csv', plot_dir='logit_results', save_file='auc_compare.png', generate_auc=True)
-#plot_auc(read_file_1='rf_sub.csv', read_file_2='rf_agg.csv', plot_dir='rf_results', save_file='auc_compare.png')
-#plot_auc(read_file_1='xgb_sub.csv', read_file_2='xgb_agg.csv', plot_dir='xgb_results', save_file='auc_compare.png')
+plot_auc(read_file_1='best_sub_logit.csv', read_file_2='best_agg_logit.csv', plot_dir='logit_results', save_file='auc_compare.png', generate_auc=True)
+plot_auc(read_file_1='best_sub_rf.csv', read_file_2='best_agg_rf.csv', plot_dir='rf_results', save_file='auc_compare.png',generate_auc=True)
+plot_auc(read_file_1='best_sub_xgb.csv', read_file_2='best_agg_xgb.csv', plot_dir='xgb_results', save_file='auc_compare.png',generate_auc=True)
 
 # PLOT AUC DECOMPOSITION
 plot_auc_decomp(read_file_1='logit_sub_model_auc_decomposed.csv', read_file_2='logit_agg_model_auc_decomposed.csv', plot_dir='logit_results', save_file='logit_auc_decomp_compare.png')
@@ -222,3 +288,6 @@ plot_auc_quin(read_file_1='logit_sub_quin_cpt.csv',read_file_2='logit_agg_quin_c
 # plots for bootstrap data
 sig_year_plot(file_name = 'logit_sig_cpts.csv', plot_dir='logit_results')
 sig_threshold(file_name = 'logit_sig_cpts.csv', plot_dir='logit_results')
+
+# get outcome counts between agg and submodels (for paper)
+plot_outcome_counts(read_file_1='best_sub_logit.csv', read_file_2='best_agg_logit.csv', plot_dir='logit_results', save_file='outcome_counts.png')
