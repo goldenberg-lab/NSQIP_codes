@@ -3,3 +3,4 @@
 support/__pycache__
 .ipynb_*
 __pycache__/
+.vscode/

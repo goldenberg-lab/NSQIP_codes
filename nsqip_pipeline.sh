@@ -65,3 +65,16 @@ python cpt_logit_bootstrap.py
 echo "----- plot results from models on cpt, quintiles, and cpt annotations -----"
 python generate_plots.py
 # Output: plots to save in figures folder
+
+echo "----- analyze BEST models -----"
+python analyze_best_perf.py
+# Output: df_best.csv, best_outcome.csv, best_mdl.csv, res_ppv.csv, df_rho_outcome.csv, and 8 figures)
+
+
+echo "----- process the sickkids validation data -----"
+python validation_process.py
+# Output: val_Y.csv, val_Yagg.csv, prop_impute.csv, dat_Xmap.csv
+
+echo "----- analyze the sickkids validation data -----"
+python validation_run.py
+# Output: dup_test.csv, dat_matcher.csv, dat_suspect.csv, df_within_sk_inf.csv
