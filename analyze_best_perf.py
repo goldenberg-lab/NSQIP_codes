@@ -188,6 +188,7 @@ sig_both.term = pd.Categorical(sig_both.term,sig_both.sort_values('lOR',ascendin
 # ----- (7) DISCRETIZATION ----- #
 
 mdl_nsqip = df_nsqip.merge(best_mdl)
+mdl_nsqip.to_csv(os.path.join(dir_output, 'best_eta.csv'),index=False)
 # Get the different bins so we can do the cuts
 p_seq = np.append(np.append(np.array([0]),np.round(np.arange(0.69,0.98,0.01),2)),np.arange(0.99,1.001,0.001))
 # Match the percentile to the quantile

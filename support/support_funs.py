@@ -11,8 +11,14 @@ def find_dir_nsqip():
     cpu = socket.gethostname()
     # Set directory based on CPU name
     if cpu == 'RT5362WL-GGB':
-        dir_nsqip = '/mnt/d/projects/NSQIP'
-        print('On predator machine')
+        if os.name == 'posix':
+            print('Predator (WSL)')
+            dir_nsqip = '/mnt/d/projects/NSQIP'
+        elif os.name == 'nt':
+            print('Predator (Windows)')
+            dir_nsqip = 'D:\\projects\\NSQIP'
+        else:
+            assert False
     elif cpu == 'snowqueen':
         print('On snowqueen machine')
         dir_nsqip = os.path.join(dir_base, '..')

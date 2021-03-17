@@ -15,20 +15,6 @@ def stopifnot(stmt):
     if not stmt:
         sys.exit('error! Statement is not True')
 
-def gen_CI(x,se,alpha):
-    pvals = np.array([1-alpha/2, alpha/2])
-    critvals = stats.norm.ppf(pvals)
-    return pd.DataFrame({'lb':x - critvals[0]*se, 'ub':x - critvals[1]*se})
-
-def auc2se(x):
-    assert isinstance(x,pd.DataFrame)
-    assert x.columns.isin(['auc','n1','n0']).sum() == 3
-    x = x.assign(q0 = lambda x: x.auc*(1-x.auc),
-                 q1 = lambda x: x.auc/(2-x.auc) - x.auc**2,
-                 q2 = lambda x: 2*x.auc**2/(1+x.auc) - x.auc**2,
-                 n1n0=lambda x: x.n1*x.n0)
-    x = x.assign(se=lambda x: np.sqrt( (x.q0 + (x.n1-1)*x.q1 + (x.n0-1)*x.q2 ) / x.n1n0 ) )
-    return x.se.values
 
         
 """
