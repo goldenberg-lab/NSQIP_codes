@@ -1,9 +1,36 @@
 import os
 import sys
+import socket
 import numpy as np
 import pandas as pd
 from scipy.stats import f
 
+# Find where we ware
+def find_dir_nsqip():
+    dir_base = os.getcwd()
+    cpu = socket.gethostname()
+    # Set directory based on CPU name
+    if cpu == 'RT5362WL-GGB':
+        dir_nsqip = '/mnt/d/projects/NSQIP'
+        print('On predator machine')
+    elif cpu == 'snowqueen':
+        print('On snowqueen machine')
+        dir_nsqip = os.path.join(dir_base, '..')
+    else:
+        sys.exit('Where are we?!')
+    return dir_nsqip
+
+def gg_save(fn,fold,gg,width,height):
+    path = os.path.join(fold, fn)
+    if os.path.exists(path):
+        os.remove(path)
+    gg.save(path, width=width, height=height)
+
+def rvec(x):
+    return np.atleast_2d(x)
+
+def cvec(x):
+    return rvec(x).T
 
 # df=qq.copy();cn_gg='gg';cn_vv='vv';cn_val='val'
 """

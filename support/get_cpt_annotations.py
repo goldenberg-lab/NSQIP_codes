@@ -1,9 +1,11 @@
 import pandas as pd
 import os
+from support.support_funs import find_dir_nsqip
 
 class cpt_desciptions():
     def __init__(self):
-        fold = os.path.join(os.getcwd(), '..', 'output')
+        dir_nsqip = find_dir_nsqip()
+        fold = os.path.join(dir_nsqip, 'output')
         # read in annotation csv
         #self.cpt_anno = pd.read_csv(os.path.join(fold, 'cpt_anno.csv'))
         cpt_group = pd.read_csv(os.path.join(fold, 'cpt_anno_group.csv'))
