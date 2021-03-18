@@ -5,7 +5,7 @@ SCRIPT TO IMPLEMENT DIFFERENT MULTITASK ARCHITECTURES
 import numpy as np
 import pandas as pd
 import os
-from support.support_funs import stopifnot
+from support.support_funs import stopifnot, makeifnot, find_dir_nsqip
 from sklearn import metrics
 
 import torch
@@ -16,13 +16,14 @@ from support.fpc_lasso import FPC
 ###############################
 # ---- STEP 1: LOAD DATA ---- #
 
-dir_base = os.getcwd()
-dir_output = os.path.join(dir_base,'..','output')
-dir_figures = os.path.join(dir_base,'..','figures')
-dir_weights = os.path.join(dir_output,'weights')
-for pp in [dir_figures, dir_weights]:
-    if not os.path.exists(pp):
-        print('making directory %s' % pp); os.mkdir(pp)
+# Set directories
+dir_NSQIP = find_dir_nsqip()
+dir_output = os.path.join(dir_NSQIP, 'output')
+assert os.path.exists(dir_output)
+dir_figures = os.path.join(dir_NSQIP, 'figures')
+makeifnot(dir_figures)
+dir_models = os.path.join(dir_output, 'models')
+makeifnot(dir_models)
 
 fn_X = 'X_imputed.csv'
 fn_Y = 'y_agg.csv'
@@ -57,6 +58,10 @@ cn_agg = list(dat_agg.columns[2:])
 #####################################
 # ---- STEP 2: TRAIN THE MODEL ---- #
 
+seed = 1234
+np.random.seed(seed)
+torch.manual_seed(seed)
+
 train_years = [2012, 2013]
 test_years = np.setdiff1d(u_years, train_years)
 
@@ -73,6 +78,8 @@ for yy in test_years:
                           dat_agg.loc[idx_test,cn_agg].reset_index(drop=True)
     cpt_train , cpt_test = dat_X.loc[idx_train,'cpt'].reset_index(drop=True), \
                         dat_X.loc[idx_test, 'cpt'].reset_index(drop=True)
+    caseid_train, caseid_test = dat_X.loc[idx_train,'caseid'].values, \
+                        dat_X.loc[idx_test,'caseid']
     # Initialize NN model
     mdl = mtask_nn()
     # Fit model
@@ -102,7 +109,8 @@ for yy in test_years:
     stopifnot(all(df_test.columns == y_test.columns))
     holder = []
     for cc in df_test.columns:
-        df_cc = pd.DataFrame({'lbl':cc,'y':y_test[cc],'phat':df_test[cc],'cpt':cpt_test})
+        df_cc = pd.DataFrame({'lbl':cc,'y':y_test[cc],'phat':df_test[cc],
+        'cpt':cpt_test,'caseid':caseid_test})
         holder.append(df_cc)
     df_test = pd.concat(holder)
     df_test.insert(0,'operyr',yy)

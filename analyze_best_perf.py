@@ -44,12 +44,13 @@ check_csv = fn_csv in os.listdir(dir_output)
 if not check_csv:
     print('Loading data via loop')
     holder = []
-    cn_keep = ['model','outcome','test_year','cpt','y','preds']
+    cn_keep = ['caseid','model','outcome','test_year','cpt','y','preds']
     for fn in fn_best:
         print('Loading file: %s' % fn)
         path = os.path.join(dir_output, fn)
         tmp_df = pd.read_csv(path, usecols=cn_keep)  #, nrows=10
         tmp_df.rename(columns={'model':'method'},inplace=True)
+        tmp_df.caseid = tmp_df.caseid.astype(int)
         mdl = fn.split('.')[0].split('_')[-1]
         tmp_df.insert(0,'model',mdl)
         holder.append(tmp_df)
@@ -78,8 +79,9 @@ fn_weights = fn_weights[fn_weights.str.contains('[0-9]{4}\\.csv$')].reset_index(
 holder = []
 for fn in fn_weights:
     print('fn: %s' % fn)
-    tmp = pd.read_csv(os.path.join(dir_weights, fn))
-    tmp = tmp.drop(columns='Unnamed: 0').rename(columns={'lbl':'outcome','operyr':'test_year','phat':'preds'})
+    tmp = pd.read_csv(os.path.join(dir_weights, fn)).drop(columns='Unnamed: 0',errors='ignore')
+    tmp.rename(columns={'lbl':'outcome','operyr':'test_year','phat':'preds'},inplace=True)
+
     tmp = tmp[tmp.outcome.str.contains('^agg')].reset_index(None,True)
     tmp = tmp.merge(dat_cpt_year,'inner',['test_year','cpt'])
     tmp.outcome = tmp.outcome.str.replace('agg_','')
