@@ -7,6 +7,7 @@ import pandas as pd
 import os
 from support.support_funs import stopifnot, makeifnot, find_dir_nsqip
 from sklearn import metrics
+from time import time
 
 import torch
 
@@ -83,7 +84,10 @@ for yy in test_years:
     # Initialize NN model
     mdl = mtask_nn()
     # Fit model
+    stime = time()
     mdl.fit(data=Xtrain,lbls=Ytrain,nepochs=2000,mbatch=1000,val_prop=0.1,lr=0.001)
+    rtime = (time() - stime)/60
+    print('----- took %0.1f minutes to train model -----' % (rtime))
     # fn_weights = pd.Series(os.listdir(dir_weights))
     # fn_weights = fn_weights[fn_weights.str.contains(str(yy)+'.pt$')].to_list()
     # if len(fn_weights)==1:

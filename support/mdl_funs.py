@@ -50,16 +50,17 @@ def x_batch(data, cidx, enc, iter):
             xmat.append(enc[jj].transform(data.iloc[:, cidx[jj]]))
     return(np.hstack(xmat))
 
-class col_encoder():
 
-    def __init__(self,dropfirst=True,quantize=False, sparse=False,
+# self=self.enc
+class col_encoder():
+    def __init__(self,quantize=False, sparse=False,
                  nbins=10, dtype=float):
-        self.dropfirst = dropfirst
         self.quantize = quantize
         self.nbins = nbins
         self.sparse = sparse
         self.dtype = dtype
 
+    # x=data.iloc[idx_train].copy()
     def fit(self, x): # Fit the encoder/scaler
         self.n = x.shape[0]
         self.p = x.shape[1]
@@ -89,10 +90,8 @@ class col_encoder():
             self.cmode = [x.iloc[:, kk].mode()[0] for kk in self.cidx]
             cmode_idx = np.array([np.where(vec == mm)[0][0] for vec, mm in zip(self.cenc.categories_, self.cmode)])
             cum_idx = np.append([0],np.cumsum([len(z) for z in self.cenc.categories_]))
-            if self.dropfirst:
-                self.cenc.drop_idx = [np.arange(s1,s2)[idx] for s1, s2, idx in zip(cum_idx[:-1],cum_idx[1:], cmode_idx)]
-            else:
-                self.cenc.drop_idx = []
+            self.cenc.drop_idx = []
+            self.cenc.drop_idx_ = None
             self.cenc.p = cum_idx.max() - len(self.cenc.drop_idx) # How many features after dropping most common
             self.cenc.cn = list(np.delete(self.cenc.get_feature_names(self.cn[self.cidx]),self.cenc.drop_idx))
             self.all_enc['cenc'] = self.cenc
