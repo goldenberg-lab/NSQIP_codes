@@ -22,8 +22,8 @@ dir_output = os.path.join(dir_NSQIP, 'output')
 assert os.path.exists(dir_output)
 dir_figures = os.path.join(dir_NSQIP, 'figures')
 makeifnot(dir_figures)
-dir_models = os.path.join(dir_output, 'models')
-makeifnot(dir_models)
+dir_weights = os.path.join(dir_output, 'weights')
+makeifnot(dir_weights)
 
 fn_X = 'X_imputed.csv'
 fn_Y = 'y_agg.csv'
