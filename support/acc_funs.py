@@ -7,6 +7,8 @@ import sys
 import os
 from time import time
 
+from support.stats_funs import auc2se, 
+
 import matplotlib
 # matplotlib.use('Agg')
 import seaborn as sns
