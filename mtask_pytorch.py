@@ -69,6 +69,7 @@ test_years = np.setdiff1d(u_years, train_years)
 yy=test_years[0]
 for yy in test_years:
     print('Training years: %s, test year: %i' % (', '.join([str(x) for x in train_years]),yy))
+    break
     idx_train = dat_X.operyr.isin(train_years)
     idx_test = (dat_X.operyr == yy)
     Xtrain, Xtest = dat_X.loc[idx_train, cn_X].reset_index(drop=True), \
@@ -114,7 +115,7 @@ for yy in test_years:
     holder = []
     for cc in df_test.columns:
         df_cc = pd.DataFrame({'lbl':cc,'y':y_test[cc],'phat':df_test[cc],
-        'cpt':cpt_test,'caseid':caseid_test})
+        'cpt':cpt_test,'caseid':caseid_test.values})
         holder.append(df_cc)
     df_test = pd.concat(holder)
     df_test.insert(0,'operyr',yy)

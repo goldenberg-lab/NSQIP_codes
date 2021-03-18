@@ -12,6 +12,7 @@ from support.acc_funs import fast_auc, fast_decomp, write_fast_decomp, write_fas
 from support.support_funs import makeifnot, decomp_var, find_dir_nsqip, gg_save
 from support.fast_bootstrap import bs_student_spearman
 from support.get_cpt_annotations import cpt_desciptions
+from support.dict import di_outcome
 from scipy.interpolate import UnivariateSpline
 from scipy.stats import rankdata
 
@@ -26,9 +27,8 @@ dir_figures = os.path.join(dir_NSQIP, 'figures')
 lst_dir = [dir_output, dir_weights, dir_figures]
 assert all([os.path.exists(fold) for fold in lst_dir])
 
-di_model = {'logit':'Logistic-L2', 'rf':'RandomForest', 'xgb':'XGBoost', 'nnet':'MultiNet'}
-di_outcome = {'adv':'ADV', 'aki':'AKI', 'cns':'CNS',
-              'nsi':'nSSIs', 'ssi':'SSIs', 'unplan':'UPLN'}
+di_model = {'logit':'Logistic-L2', 'rf':'RandomForest',
+            'xgb':'XGBoost', 'nnet':'MultiNet'}
 di_method = {'agg':'Aggregate', 'sub':'CPT-model'}
 
 cpt_trans = cpt_desciptions()
@@ -68,7 +68,6 @@ else:
     print('Loading large CSV file')
     df_nsqip = pd.read_csv(os.path.join(dir_output, fn_csv))
 dat_cpt_year = df_nsqip.groupby(['test_year','cpt']).size().reset_index().drop(columns=[0])
-
 
 ##################################
 # ----- (2) LOAD MULTITASK ----- #
@@ -114,6 +113,7 @@ df_within = write_fast_decomp(df=df_nsqip, fn=fn_within, cn=cn_gg2, path=dir_out
 # Repeat on the CPT level
 fn_within_cpt = 'df_within_cpt.csv'
 df_within_cpt = write_fast_decomp(df=df_nsqip, fn=fn_within_cpt, cn=cn_gg2, path=dir_output, ret_df=True)
+
 
 #########################################
 # ----- (4) BEST label and models ----- #
