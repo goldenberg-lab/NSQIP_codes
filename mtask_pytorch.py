@@ -69,7 +69,6 @@ test_years = np.setdiff1d(u_years, train_years)
 yy=test_years[0]
 for yy in test_years:
     print('Training years: %s, test year: %i' % (', '.join([str(x) for x in train_years]),yy))
-    break
     idx_train = dat_X.operyr.isin(train_years)
     idx_test = (dat_X.operyr == yy)
     Xtrain, Xtest = dat_X.loc[idx_train, cn_X].reset_index(drop=True), \

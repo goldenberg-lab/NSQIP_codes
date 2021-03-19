@@ -69,7 +69,7 @@ def decomp_var(df, cn_gg, cn_vv, cn_val):
 def makeifnot(path):
     if not os.path.exists(path):
         print('Making path')
-        os.makedir(path)
+        os.mkdir(path)
 
 def gg_color_hue(n):
     from colorspace.colorlib import HCL
