@@ -8,7 +8,8 @@ import pandas as pd
 import numpy as np
 from plotnine import *
 # Load the help functions
-from support.acc_funs import fast_auc, fast_decomp, write_fast_decomp, write_fast_inference, gen_CI, auc2se
+from support.acc_funs import fast_auc, fast_decomp, write_fast_decomp, write_fast_inference
+from support.stats_funs import gen_CI, auc2se
 from support.support_funs import makeifnot, decomp_var, find_dir_nsqip, gg_save
 from support.fast_bootstrap import bs_student_spearman
 from support.get_cpt_annotations import cpt_desciptions
@@ -48,9 +49,13 @@ if not check_csv:
     for fn in fn_best:
         print('Loading file: %s' % fn)
         path = os.path.join(dir_output, fn)
-        tmp_df = pd.read_csv(path, usecols=cn_keep)  #, nrows=10
-        tmp_df.rename(columns={'model':'method'},inplace=True)
-        tmp_df.caseid = tmp_df.caseid.astype(int)
+        h1 = pd.read_csv(path, nrows=1)
+        if 'caseid' in list(h1.columns):
+            tmp_df = pd.read_csv(path, usecols=cn_keep)
+            tmp_df.caseid = tmp_df.caseid.astype(int)
+        else:
+            tmp_df = pd.read_csv(path, usecols=list(np.setdiff1d(cn_keep,['caseid'])))
+        tmp_df.rename(columns={'model':'method'},inplace=True)        
         mdl = fn.split('.')[0].split('_')[-1]
         tmp_df.insert(0,'model',mdl)
         holder.append(tmp_df)
@@ -61,9 +66,9 @@ if not check_csv:
     df_nsqip['version'] = df_nsqip.outcome.str.replace('[^0-9]','')
     df_nsqip.version = np.where(df_nsqip.version == '', '1', df_nsqip.version).astype(int)
     df_nsqip.outcome = df_nsqip.outcome.str.replace('[^a-z]','')
-    del holder
     print('Writing to file')
     df_nsqip.to_csv(os.path.join(dir_output, fn_csv), index=False)
+    del holder
 else:
     print('Loading large CSV file')
     df_nsqip = pd.read_csv(os.path.join(dir_output, fn_csv))

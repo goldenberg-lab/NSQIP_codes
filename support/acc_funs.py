@@ -17,6 +17,23 @@ def stopifnot(stmt):
     if not stmt:
         sys.exit('error! Statement is not True')
 
+# Implements the AUROC for a stratified smaple
+# y=tmp_sk.y.copy(); score=tmp_sk.preds.copy()
+def strat_bs_auc(y, score, n_bs, alpha):
+    assert len(y) == len(score)
+    if not isinstance(y,np.ndarray):
+        y = np.array(y)
+        score = np.array(score)
+    n = len(y)
+    idx1 = np.where(y == 1)[0]
+    n1 = len(idx1)
+    idx0 = np.delete(np.arange(n),idx1)
+    n0 = n - n1
+    Smat = np.r_[np.random.choice(score[idx1],n1*n_bs).reshape([n1,n_bs]),
+                 np.random.choice(score[idx0],n0*n_bs).reshape([n0,n_bs])]
+    auc_bs = stats.rankdata(Smat,axis=0)[:n1].sum(0) - n1*(n1+1)/2
+    auc_bs /= n1*n0
+    return np.quantile(auc_bs,[alpha/2,1-alpha/2])
 
         
 """
