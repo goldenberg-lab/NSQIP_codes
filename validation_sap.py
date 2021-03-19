@@ -37,6 +37,8 @@ assert all([os.path.exists(fold) for fold in lst_dir])
 di_outcome = {'adv':'ADV', 'aki':'AKI', 'cns':'CNS',
               'nsi':'nSSIs', 'ssi':'SSIs', 'unplan':'UPLN'}
 
+crit95 = stats.norm.ppf(0.975)
+
 #############################
 # ----- (1) LOAD DATA ----- #
 
@@ -90,7 +92,7 @@ xgb_ssi = pd.concat([tmp1,tmp2]).drop(columns=['Unnamed: 0'],errors='ignore')
 xgb_ssi = xgb_ssi.reset_index(None,True).rename(columns=di_cn).assign(mdl='xgb')
 bhat_ssi = pd.concat([logit_ssi, xgb_ssi]).reset_index(None,True)
 bhat_ssi = bhat_ssi.assign(y=lambda x: x.y.str.replace('agg_',''),)
-bhat_ssi.is_sig = bhat_ssi.is_sig.ifllna(False)
+bhat_ssi.is_sig = bhat_ssi.is_sig.fillna(False)
 # Match up the columns
 assert len(np.setdiff1d(bhat_ssi.cn.unique(),df_cn.cn)) == 0
 bhat_ssi = bhat_ssi.merge(df_cn,'left','cn')
@@ -237,7 +239,7 @@ gg_save('gg_calib_ssi.png',dir_figures,gg_calib_ssi,6,5)
 tmp = df_sk.melt(['caseid','y'],['preds','nb'],'mdl','score')
 
 cn = ['y','preds','nb']
-np.random.state(1234)
+np.random.seed(1234)
 holder = []
 for i in range(2000):
     holder.append(df_sk.sample(n=len(df_sk),replace=True,random_state=i)[cn].sum(0).reset_index().assign(idx=i))
@@ -306,7 +308,7 @@ tmp3 = tmp3.assign(value=lambda x: np.where(x.logit == 'pval', np.sqrt(-np.log10
 tmp4 = tmp3.groupby(['y','logit']).apply(lambda x: stats.pearsonr(x.xgb, x.value)[0]).reset_index().rename(columns={0:'rho'})
 tmp4 = tmp4.assign(xx=np.tile([0.88,3],2),yy=[-4.7,0.14,-5.4,0.11], lbl=lambda x: 'rho='+np.round(x.rho*100,1).astype(str)+'%').rename(columns={'logit':'Logistic'})
 
-gt = 'Text shows pearson correlation\nHighlighted points have FDR<5%%' % (rho*100)
+gt = 'Text shows pearson correlation\nHighlighted points have FDR<5%%'
 tmp3.rename(columns={'logit':'Logistic'}, inplace=True)
 tmp_di = {'bhat':'Coefficient (y=log, x=abs)', 'pval':'P-Value (y=None, x=-log10)'}
 gg_logit_xgb = (ggplot(tmp3,aes(x='value',y='xgb',color='y',alpha='is_sig.astype(str)')) + 
