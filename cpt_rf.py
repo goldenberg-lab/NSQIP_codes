@@ -9,6 +9,9 @@ args = parser.parse_args()
 m_depth= args.m_depth
 n_est = args.n_est
 
+# random seed
+random.seed(1234)
+
 import numpy as np
 import pandas as pd
 import os
