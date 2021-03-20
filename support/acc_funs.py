@@ -7,6 +7,8 @@ import sys
 import os
 from time import time
 
+from support.stats_funs import auc2se
+
 import matplotlib
 # matplotlib.use('Agg')
 import seaborn as sns
@@ -15,20 +17,23 @@ def stopifnot(stmt):
     if not stmt:
         sys.exit('error! Statement is not True')
 
-def gen_CI(x,se,alpha):
-    pvals = np.array([1-alpha/2, alpha/2])
-    critvals = stats.norm.ppf(pvals)
-    return pd.DataFrame({'lb':x - critvals[0]*se, 'ub':x - critvals[1]*se})
-
-def auc2se(x):
-    assert isinstance(x,pd.DataFrame)
-    assert x.columns.isin(['auc','n1','n0']).sum() == 3
-    x = x.assign(q0 = lambda x: x.auc*(1-x.auc),
-                 q1 = lambda x: x.auc/(2-x.auc) - x.auc**2,
-                 q2 = lambda x: 2*x.auc**2/(1+x.auc) - x.auc**2,
-                 n1n0=lambda x: x.n1*x.n0)
-    x = x.assign(se=lambda x: np.sqrt( (x.q0 + (x.n1-1)*x.q1 + (x.n0-1)*x.q2 ) / x.n1n0 ) )
-    return x.se.values
+# Implements the AUROC for a stratified smaple
+# y=tmp_sk.y.copy(); score=tmp_sk.preds.copy()
+def strat_bs_auc(y, score, n_bs, alpha):
+    assert len(y) == len(score)
+    if not isinstance(y,np.ndarray):
+        y = np.array(y)
+        score = np.array(score)
+    n = len(y)
+    idx1 = np.where(y == 1)[0]
+    n1 = len(idx1)
+    idx0 = np.delete(np.arange(n),idx1)
+    n0 = n - n1
+    Smat = np.r_[np.random.choice(score[idx1],n1*n_bs).reshape([n1,n_bs]),
+                 np.random.choice(score[idx0],n0*n_bs).reshape([n0,n_bs])]
+    auc_bs = stats.rankdata(Smat,axis=0)[:n1].sum(0) - n1*(n1+1)/2
+    auc_bs /= n1*n0
+    return np.quantile(auc_bs,[alpha/2,1-alpha/2])
 
         
 """

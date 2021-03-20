@@ -4,8 +4,7 @@ from joblib import dump, load
 import numpy as np
 import pandas as pd
 from time import time
-from scipy.interpolate import UnivariateSpline
-from support.acc_funs import fast_auc, fast_decomp, write_fast_decomp, write_fast_inference, gen_CI
+from support.acc_funs import fast_decomp, write_fast_decomp, gen_CI, auc2se
 from support.support_funs import find_dir_nsqip, gg_save
 
 import plotnine
@@ -32,17 +31,14 @@ di_tt = {'total':'Total', 'within':'Within', 'between':'Between'}
 # (i) Load in the "best" model/label order
 best_mdl = pd.read_csv(os.path.join(dir_output, 'best_mdl.csv'))
 
-# (ii) Load the AUROC variance
-dat_var = pd.read_csv(os.path.join(dir_output, 'dat_var.csv'))
-spl = UnivariateSpline(x=dat_var.auc, y=dat_var.c)
-
 cn_gg = ['model','outcome','version','method']
-# (iii) Load the AUROC point estimates and uncertainty for 
+# (ii) Load the AUROC point estimates and uncertainty for 
 df_within = pd.read_csv(os.path.join(dir_output, 'df_within.csv'))
 df_within_inf = pd.read_csv(os.path.join(dir_output, 'df_within_inf.csv'))
 df_within = df_within.query('tt!="between" & method=="agg"').reset_index(None,True)
 df_within = df_within.assign(n0 = lambda x: np.where(x.tt=="total", (x.den/x.n1),0).astype(int))
-df_within = df_within.assign(se=lambda x: np.sqrt((x.n1+x.n0+1)/spl(x.auc)/(x.n1*x.n0)))
+df_within['se'] = auc2se(df_within,True)
+df_within.se = np.where(df_within.se==np.inf,np.NaN,df_within.se)
 tmp = df_within_inf.groupby(cn_gg).auc.std(ddof=1).reset_index().rename(columns={'auc':'se2'}).assign(tt='within')
 df_within = df_within.merge(best_mdl,'inner',cn_gg).merge(tmp,'left')
 df_within = df_within.assign(se=lambda x: np.where(x.se2.isnull(), x.se, x.se2)).drop(columns='se2')
@@ -176,8 +172,9 @@ for ii, rr in dat_models.iterrows():
     holder.append(tmp_df)
 dat_preds = pd.concat(holder).reset_index(None,True)
 dat_preds = dat_X_Xmap[['caseid','cpt']].merge(dat_preds,'right','caseid')
+dat_preds.to_csv(os.path.join(dir_output,'dat_sk_score.csv'), index=False)
 
-########################################
+##################################
 # ----- (4) RUN INFERENCE  ----- #
 
 # Run the decomposition

@@ -8,10 +8,12 @@ import pandas as pd
 import numpy as np
 from plotnine import *
 # Load the help functions
-from support.acc_funs import fast_auc, fast_decomp, write_fast_decomp, write_fast_inference, gen_CI, auc2se
+from support.acc_funs import fast_auc, fast_decomp, write_fast_decomp, write_fast_inference
+from support.stats_funs import gen_CI, auc2se
 from support.support_funs import makeifnot, decomp_var, find_dir_nsqip, gg_save
 from support.fast_bootstrap import bs_student_spearman
 from support.get_cpt_annotations import cpt_desciptions
+from support.dict import di_outcome
 from scipy.interpolate import UnivariateSpline
 from scipy.stats import rankdata
 
@@ -26,9 +28,8 @@ dir_figures = os.path.join(dir_NSQIP, 'figures')
 lst_dir = [dir_output, dir_weights, dir_figures]
 assert all([os.path.exists(fold) for fold in lst_dir])
 
-di_model = {'logit':'Logistic-L2', 'rf':'RandomForest', 'xgb':'XGBoost', 'nnet':'MultiNet'}
-di_outcome = {'adv':'ADV', 'aki':'AKI', 'cns':'CNS',
-              'nsi':'nSSIs', 'ssi':'SSIs', 'unplan':'UPLN'}
+di_model = {'logit':'Logistic-L2', 'rf':'RandomForest',
+            'xgb':'XGBoost', 'nnet':'MultiNet'}
 di_method = {'agg':'Aggregate', 'sub':'CPT-model'}
 
 cpt_trans = cpt_desciptions()
@@ -44,12 +45,17 @@ check_csv = fn_csv in os.listdir(dir_output)
 if not check_csv:
     print('Loading data via loop')
     holder = []
-    cn_keep = ['model','outcome','test_year','cpt','y','preds']
+    cn_keep = ['caseid','model','outcome','test_year','cpt','y','preds']
     for fn in fn_best:
         print('Loading file: %s' % fn)
         path = os.path.join(dir_output, fn)
-        tmp_df = pd.read_csv(path, usecols=cn_keep)  #, nrows=10
-        tmp_df.rename(columns={'model':'method'},inplace=True)
+        h1 = pd.read_csv(path, nrows=1)
+        if 'caseid' in list(h1.columns):
+            tmp_df = pd.read_csv(path, usecols=cn_keep)
+            tmp_df.caseid = tmp_df.caseid.astype(int)
+        else:
+            tmp_df = pd.read_csv(path, usecols=list(np.setdiff1d(cn_keep,['caseid'])))
+        tmp_df.rename(columns={'model':'method'},inplace=True)        
         mdl = fn.split('.')[0].split('_')[-1]
         tmp_df.insert(0,'model',mdl)
         holder.append(tmp_df)
@@ -60,14 +66,13 @@ if not check_csv:
     df_nsqip['version'] = df_nsqip.outcome.str.replace('[^0-9]','')
     df_nsqip.version = np.where(df_nsqip.version == '', '1', df_nsqip.version).astype(int)
     df_nsqip.outcome = df_nsqip.outcome.str.replace('[^a-z]','')
-    del holder
     print('Writing to file')
     df_nsqip.to_csv(os.path.join(dir_output, fn_csv), index=False)
+    del holder
 else:
     print('Loading large CSV file')
     df_nsqip = pd.read_csv(os.path.join(dir_output, fn_csv))
 dat_cpt_year = df_nsqip.groupby(['test_year','cpt']).size().reset_index().drop(columns=[0])
-
 
 ##################################
 # ----- (2) LOAD MULTITASK ----- #
@@ -78,8 +83,9 @@ fn_weights = fn_weights[fn_weights.str.contains('[0-9]{4}\\.csv$')].reset_index(
 holder = []
 for fn in fn_weights:
     print('fn: %s' % fn)
-    tmp = pd.read_csv(os.path.join(dir_weights, fn))
-    tmp = tmp.drop(columns='Unnamed: 0').rename(columns={'lbl':'outcome','operyr':'test_year','phat':'preds'})
+    tmp = pd.read_csv(os.path.join(dir_weights, fn)).drop(columns='Unnamed: 0',errors='ignore')
+    tmp.rename(columns={'lbl':'outcome','operyr':'test_year','phat':'preds'},inplace=True)
+
     tmp = tmp[tmp.outcome.str.contains('^agg')].reset_index(None,True)
     tmp = tmp.merge(dat_cpt_year,'inner',['test_year','cpt'])
     tmp.outcome = tmp.outcome.str.replace('agg_','')
@@ -112,6 +118,7 @@ df_within = write_fast_decomp(df=df_nsqip, fn=fn_within, cn=cn_gg2, path=dir_out
 # Repeat on the CPT level
 fn_within_cpt = 'df_within_cpt.csv'
 df_within_cpt = write_fast_decomp(df=df_nsqip, fn=fn_within_cpt, cn=cn_gg2, path=dir_output, ret_df=True)
+
 
 #########################################
 # ----- (4) BEST label and models ----- #
@@ -188,6 +195,7 @@ sig_both.term = pd.Categorical(sig_both.term,sig_both.sort_values('lOR',ascendin
 # ----- (7) DISCRETIZATION ----- #
 
 mdl_nsqip = df_nsqip.merge(best_mdl)
+mdl_nsqip.to_csv(os.path.join(dir_output, 'best_eta.csv'),index=False)
 # Get the different bins so we can do the cuts
 p_seq = np.append(np.append(np.array([0]),np.round(np.arange(0.69,0.98,0.01),2)),np.arange(0.99,1.001,0.001))
 # Match the percentile to the quantile

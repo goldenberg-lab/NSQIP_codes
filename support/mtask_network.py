@@ -45,7 +45,7 @@ class net_architecture(nn.Module):
         return x
 
 # self = mtask_nn()
-# data=Xtrain;lbls=Ytrain;nepochs=1;mbatch=10000;val_prop=0.1;lr=0.001;ii=0;jj=0
+# data=Xtrain.copy();lbls=Ytrain.copy();nepochs=2000;mbatch=1000;val_prop=0.1;lr=0.001
 class mtask_nn():
     def __init__(self):
         self.device = 'cpu'
@@ -80,7 +80,7 @@ class mtask_nn():
         self.idx_train = idx_train
         self.idx_val = idx_val
         # Find encodings/normalization
-        self.enc = col_encoder(dropfirst=False)
+        self.enc = col_encoder()
         self.enc.fit(data.iloc[idx_train])
         self.n_input = len(self.enc.cn_transform)
         Yval = lbls.iloc[idx_val].values # Pre-compute for faster eval

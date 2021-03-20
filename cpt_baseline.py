@@ -1,22 +1,26 @@
 import numpy as np
 import pandas as pd
 import os
-from support.support_funs import stopifnot
+import dill
+from support.support_funs import stopifnot, find_dir_nsqip
 from support.naive_bayes import mbatch_NB
 from sklearn import metrics
-
 import seaborn as sns
+
 
 ###############################
 # ---- STEP 1: LOAD DATA ---- #
 
-dir_base = os.getcwd()
-dir_output = os.path.join(dir_base,'..','output')
-dir_figures = os.path.join(dir_base,'..','figures')
+dir_NSQIP = find_dir_nsqip()
+dir_output = os.path.join(dir_NSQIP,'output')
+dir_models = os.path.join(dir_output, 'models')
+dir_figures = os.path.join(dir_NSQIP,'figures')
+lst_dir = [dir_figures, dir_output, dir_models]
+assert all([os.path.exists(fold) for fold in lst_dir])
 
 fn_X = 'X_imputed.csv'
 fn_Y = 'y_agg.csv'
-dat_X = pd.read_csv(os.path.join(dir_output,fn_X))
+dat_X = pd.read_csv(os.path.join(dir_output,fn_X))  #,usecols=['operyr','caseid','cpt']
 dat_Y = pd.read_csv(os.path.join(dir_output,fn_Y))
 print(dat_X.shape); print(dat_Y.shape)
 stopifnot(all(dat_X.caseid == dat_Y.caseid))
@@ -57,6 +61,10 @@ for ii, vv in enumerate(cn_Y):
             'pr':metrics.average_precision_score(ytest.values, phat_bernoulli)},index=[0]))
     holder_vv.append(pd.concat(holder_metrics).assign(outcome=vv,operyr=tmp_train_years))
     holder_phat.append(pd.concat(holder_score).assign(outcome=vv))
+    # Save the model
+    path_mdl = os.path.join(dir_models,'NB_cpt_' + vv + '.pickle')
+    with open(path_mdl, 'wb') as file:
+        dill.dump(mdl_bernoulli,file)
 
 res_cpt = pd.concat(holder_vv).reset_index(drop=True)
 res_cpt.insert(0,'tt','cpt')
