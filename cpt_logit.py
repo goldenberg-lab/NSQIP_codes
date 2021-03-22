@@ -6,6 +6,9 @@ parser.add_argument('-cvalue', '--c_value', type=float, help='logit lambda', def
 args = parser.parse_args()
 c_value= args.c_value
 
+# random seed
+random.seed(1234)
+
 import numpy as np
 import pandas as pd
 import os

@@ -10,8 +10,9 @@ args = parser.parse_args()
 m_depth= args.m_depth
 c_sample = args.c_sample
 
-m_depth = 2
-c_sample =0.5
+# random seed
+random.seed(1234)
+
 import numpy as np
 import pandas as pd
 import os

@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import os
 import seaborn as sns
+from plotnine import ggplot, geom_bar,aes, labs, theme_bw, geom_violin
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -29,6 +30,7 @@ dir_figures = os.path.join(dir_base, '..', 'figures')
 # --- rf_results/auc_compare.png
 # --- xgb_results/auc_compare.png
 
+
 def plot_outcome_counts(read_file_1, read_file_2, save_file, plot_dir):
     temp_sub = pd.read_csv(os.path.join(dir_output, read_file_1))
     temp_agg = pd.read_csv(os.path.join(dir_output, read_file_2))
@@ -37,11 +39,13 @@ def plot_outcome_counts(read_file_1, read_file_2, save_file, plot_dir):
     plot_output = os.path.join(dir_figures, plot_dir)
     dat = pd.concat([temp_agg, temp_sub], axis=0).reset_index(drop=True)
     dat = dat.groupby(['outcome', 'model']).size().reset_index(name='counts')
-    img = sns.barplot(x='outcome', y='counts', hue='model', data=dat).get_figure()
-    img.tight_layout()
-    img.axes[0].yaxis.get_major_formatter().set_scientific(False)
-    img.savefig(os.path.join(plot_output, save_file))
-    img.clf()
+    img= (ggplot(dat, aes(x='outcome', y='counts', fill= 'model'))+ geom_bar(stat='identity', position='dodge')) +labs(x='Outcome', y='Counts') + theme_bw()
+    img.save(os.path.join(plot_output, save_file))
+    #img = sns.barplot(x='outcome', y='counts', hue='model', data=dat).get_figure()
+    #img.tight_layout()
+    #img.axes[0].yaxis.get_major_formatter().set_scientific(False)
+    #img.savefig(os.path.join(plot_output, save_file))
+    #img.clf()
 
 
 def subset_agg(temp_sub, temp_agg):
@@ -190,6 +194,7 @@ def get_auc(df):
 
     return df
 
+
 # -----------------------------------------------
 # FUNCTIONS FOR PLOTTING
 def plot_auc(read_file_1, read_file_2, plot_dir, save_file, generate_auc):
@@ -214,15 +219,20 @@ def plot_auc(read_file_1, read_file_2, plot_dir, save_file, generate_auc):
     temp_agg = temp_agg.dropna().reset_index(drop=True)
 
     # create new variable to indicate if agg or sub data
-    temp_sub.insert(0, 'model', 'sub')
-    temp_agg.insert(0, 'model', 'agg')
+    temp_sub.insert(0, 'model', 'CPT specific')
+    temp_agg.insert(0, 'model', 'Aggregate')
 
     # get outpult file
     plot_output = os.path.join(dir_figures, plot_dir)
     # combine data
     dat = pd.concat([temp_agg, temp_sub], axis=0).reset_index(drop=True)
-    sns.catplot(x='outcome', y='auc', hue='model',
-                kind='violin',  data=dat).savefig(os.path.join(plot_output, save_file))
+    img = (ggplot(dat, aes(x='outcome', y='auc', fill='model')) + geom_violin(aes(draw_quantiles='auc')) + labs(x='Outcome',  y='AUROC') + theme_bw())
+    img.save(os.path.join(plot_output, save_file))
+    #img.clf()
+
+    #sns.set_style("whitegrid")
+    #sns.catplot(x='outcome', y='auc', hue='model',
+                #kind='violin',  data=dat).set_axis_labels('Outcome', 'AUROC').savefig(os.path.join(plot_output, save_file))
 
 def clean_quin(temp_quin):
     del temp_quin['num_obs']
