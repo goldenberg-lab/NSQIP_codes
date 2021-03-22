@@ -174,11 +174,13 @@ agg_cpt_sig = agg_cpt_sig.pivot_table('n',cn,'is_sig').fillna(0).astype(int).res
 agg_cpt_sig = agg_cpt_sig.rename(columns={'value':'n'}).sort_values(cn).reset_index(None,True)
 agg_cpt_sig = agg_cpt_sig.merge(agg_cpt_sig.groupby(cn).n.sum().reset_index().rename(columns={'n':'tot'}))
 agg_cpt_sig = agg_cpt_sig.assign(pct=lambda x: x.n/x.tot)
-dat_cpt_sig = pd.concat([dat_cpt_sig,cpt_trans.trans(dat_cpt_sig.cpt.values)],1)
+dat_cpt_sig = pd.concat([dat_cpt_sig,cpt_trans.trans(dat_cpt_sig.cpt.values).drop(columns='cpt')],1)
 dat_cpt_sig.group = dat_cpt_sig.group.str.replace('Surgical\\sProcedures\\son\\sthe\\s','').str.replace('\\sSystem','')
-
 # Get the "best" model and check for organ enrichment
 dat_cpt_sig_mdl = dat_cpt_sig.merge(best_mdl,'inner')
+# Save for later....
+dat_cpt_sig_mdl.drop(columns=['model','version','method']).to_csv(os.path.join(dir_output,'dat_cpt_sig_mdl.csv'),index=False)
+# Continue
 sig_organ = dat_cpt_sig_mdl.pivot_table(index='organ',columns='is_sig',values='cpt',aggfunc='size', fill_value=0)
 sig_group = dat_cpt_sig_mdl.pivot_table(index='group',columns='is_sig',values='cpt',aggfunc='size', fill_value=0)
 sig_both = pd.concat([sig_organ.reset_index().rename(columns={'organ':'term'}).assign(tt='organ'),
@@ -288,7 +290,7 @@ gg_between = (ggplot(tmp,aes(x='test_year.astype(str)',y='auc',color='tt')) +
               labs(y='AUROC',x='Test year') + 
               geom_hline(yintercept=0.5,linetype='--') + 
               scale_y_continuous(limits=[0.25,1],breaks=list(np.arange(0.25,1.01,0.25))))
-gg_save('gg_between.png',dir_figures,gg_auc_within,8,4)
+gg_save('gg_between.png',dir_figures,gg_between,8,4)
 
 # (8.C) Distribution within the "within"
 tmp1 = df_within.merge(best_mdl).query('tt=="within"').reset_index(None,True).copy()

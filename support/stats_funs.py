@@ -2,6 +2,39 @@ import numpy as np
 import scipy as sp
 from scipy import stats
 import pandas as pd
+from scipy.special import comb
+
+def n_star_sens(sens, dsens, beta, alpha):
+    """
+    sens: the target sensitivity
+    dens: the difference in the trial sensitivity
+    beta/alpha: type-II and type-I error rate
+    """
+    assert (dsens > 0) & (dsens < sens) & (sens > 0) & (sens < 1)
+    l = sens - dsens
+    term1 = np.sqrt(sens*(1-sens))*stats.norm.ppf(beta)
+    term2 = np.sqrt(l*(1-l))*stats.norm.ppf(1-alpha)
+    term3 = l - sens 
+    stat = ((term1 - term2)/term3)**2
+    return stat
+
+# n=100; k=0.05; j=10
+# del n, k, j
+def umbrella_thresh(n, k, j, ret_df=False):
+    """
+    1 - k: the sensitivity target
+    1 - j: the generalization error (coverage target)
+    """
+    assert (k > 0) & (k <= 0.5)
+    assert (j > 0) & (j <= 0.5)
+    rank_seq = np.arange(n+1)
+    rank_pdf = np.array([comb(n, l, True)*((1-k)**l)*((k)**(n-l)) for l in rank_seq])
+    rank_cdf = np.array([rank_pdf[l:].sum() for l in rank_seq])
+    res = pd.DataFrame({'rank':rank_seq, 'pdf':rank_pdf, 'cdf':rank_cdf, 'delt':1-rank_cdf})
+    if ret_df:
+        return res
+    r_max = max(res[res.delt <= 1-j]['rank'].max(),1)
+    return r_max
 
 # Function to carry out bootstrap
 # x=df_sk.preds.values; fun=np.sum; n_bs=1000; k=6

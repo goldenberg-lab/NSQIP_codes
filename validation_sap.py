@@ -12,11 +12,12 @@ import os
 import dill
 import pickle
 from joblib import dump, load
+from time import time
 import numpy as np
 import pandas as pd
 from statsmodels.stats.multitest import fdrcorrection as fdr_corr
-from support.stats_funs import gen_CI, auc2se, bootstrap_x
-from support.acc_funs import fast_auc, strat_bs_auc
+from support.stats_funs import gen_CI, auc2se, bootstrap_x, umbrella_thresh, n_star_sens
+from support.acc_funs import fast_auc, strat_bs_auc, ppv, sens_spec_fun
 from support.support_funs import find_dir_nsqip, gg_save, gg_color_hue, cvec
 from support.dict import di_agg
 from scipy import stats
@@ -24,14 +25,16 @@ import plotnine
 from plotnine import *
 from plydata.cat_tools import *
 from statsmodels.stats.proportion import proportion_confint as propCI
+from scipy.interpolate import UnivariateSpline as spl
 
 # Set directories
 dir_NSQIP = find_dir_nsqip()
 dir_figures = os.path.join(dir_NSQIP, 'figures')
 dir_output = os.path.join(dir_NSQIP, 'output')
+dir_data = os.path.join(dir_NSQIP, 'data')
 dir_models = os.path.join(dir_output, 'models')
 dir_ssi = os.path.join(dir_output, 'ssi')
-lst_dir = [dir_figures, dir_output, dir_models, dir_ssi]
+lst_dir = [dir_figures, dir_output, dir_models, dir_ssi, dir_data]
 assert all([os.path.exists(fold) for fold in lst_dir])
 
 di_outcome = {'adv':'ADV', 'aki':'AKI', 'cns':'CNS',
@@ -46,6 +49,12 @@ crit95 = stats.norm.ppf(0.975)
 df_sk = pd.read_csv(os.path.join(dir_output,'dat_sk_score.csv'))
 df_sk = df_sk.query('outcome == "ssi"').reset_index(None, True).drop(columns='outcome')
 df_sk.insert(0,'ds','sk')
+cn_from = ['Case Number', 'Operation Date']
+cn_to = ['caseid', 'date']
+dat_raw = pd.read_csv(os.path.join(dir_data,'SK_extract.csv'),usecols=cn_from)
+dat_raw.rename(columns=dict(zip(cn_from, cn_to)), inplace=True)
+dat_raw.date = pd.to_datetime(dat_raw.date,format='%m/%d/%Y')
+df_sk = dat_raw.merge(df_sk,'left','caseid').sort_values('date').reset_index(None, True)
 
 # (ii) Load NSQIP predicted risk scores
 df_nsq = pd.read_csv(os.path.join(dir_output, 'best_eta.csv'))
@@ -74,7 +83,8 @@ df_nb = df_nb.merge(df_idt,'left','caseid')
 df_nsq = df_nsq.merge(df_nb[['caseid','cpt','phat']],'left').rename(columns={'phat':'nb'})
 
 # (v) Load in the feature name dictionary
-df_cn = pd.read_csv(os.path.join(dir_output,'bhat_desc.csv'),usecols=['cn','desc'])
+df_cn = pd.read_csv(os.path.join(dir_output,'bhat_desc.csv'),usecols=['cn','desc','actionable_time_frame'])
+df_cn.rename(columns={'actionable_time_frame':'tframe'}, inplace=True)
 
 # (vi) Load coefficient/VI results
 di_cn = {'feature_names':'cn', 'feature_importance':'bhat', 
@@ -82,6 +92,7 @@ di_cn = {'feature_names':'cn', 'feature_importance':'bhat',
 'sig':'is_sig', 'feature_pval_rank':'rnk', 'feature_importance_rank':'rnk'}
 tmp1 = pd.read_csv(os.path.join(dir_ssi, 'logit_ssi1.csv'))
 tmp2 = pd.read_csv(os.path.join(dir_ssi, 'logit_ssi2.csv'))
+assert np.all(tmp1.feature_names == tmp2.feature_names)
 logit_ssi = pd.concat([tmp1,tmp2]).drop(columns=['Unnamed: 0'],errors='ignore')
 logit_ssi = logit_ssi.reset_index(None,True).rename(columns=di_cn).assign(mdl='logit')
 logit_ssi.pval = fdr_corr(logit_ssi.pval)[1]
@@ -119,6 +130,20 @@ auc_cpt_nsq = pd.read_csv(os.path.join(dir_output,'df_within_cpt.csv'))
 auc_cpt_nsq = auc_cpt_nsq.merge(best_mdl.query('outcome=="ssi"')).assign(ds='nsq')
 auc_cpt_nsq.drop(columns=['version','method','r_s','outcome','model'],inplace=True)
 auc_cpt_nsq.rename(columns={'g':'cpt'},inplace=True)
+
+# (x) Load in the null XGB results
+res_xgb_fi = pd.read_csv(os.path.join(dir_ssi,'xgb_shuffled_feature_importance.csv'))
+res_xgb_fi = res_xgb_fi.drop(columns='Unnamed: 0',errors='ignore').query('rand=="Random shuffle"')
+res_xgb_fi.reset_index(None, True, True)
+# Get the threshold for a 5% fpr
+fpr_xgb_fi = res_xgb_fi.feature_importance.quantile(0.95)
+
+# (xi) Load the "significant CPTs" (i.e. discriminatory power within)
+cn_use = ['outcome','cpt','is_sig']
+df_cpt_sig = pd.read_csv(os.path.join(dir_output,'dat_cpt_sig_mdl.csv'),usecols=cn_use)
+cpt_use_cov = df_cpt_sig.query('outcome=="ssi" & is_sig').cpt.to_list()
+cpt_use_nb = df_cpt_sig.query('outcome=="ssi" & ~is_sig').cpt.to_list()
+cpt_use_other = np.setdiff1d(df_sk.cpt.unique(),np.union1d(cpt_use_cov, cpt_use_nb))
 
 # Check that CPTs overlap
 cpt_sk = pd.Series(df_sk.cpt.unique())
@@ -261,13 +286,138 @@ gg_save('gg_ydiff_sk.png',dir_figures,gg_ydiff_sk,6,5)
 #########################################
 # ----- (5) THRESHOLD CALIBRATION ----- #
 
-# LOAD NSQIP RESULTS
-# APPLY THE NP-UMBRELLA TO GET THE LOWER-BOUND...
-# SHOW THE REAL-TIME PERFORMANCE AND THE REJECTION BOUNDS, WHEN THAT HAPPENS
-# WHETHER THIS CORRESPONDS TO THE POWER ANALYSIS
+# ---- (i) GOAL IS FOR 50% SENSITIVITY ---- #
+sens_target = 0.5
+sens_trial = 0.4
+alpha, beta = 0.05, 0.2
+rate_nsq, rate_sk = df_nsq.y.mean(), df_sk.y.mean()
+n_bs = 1000
+# Calculate the sample sizes for different power ranges
+power_seq = np.arange(0.10,0.61,0.01)
+nstar_seq = n_star_sens(sens_target, sens_target-sens_trial,1-power_seq,alpha)
+df_n_power = pd.DataFrame({'n_nsq':nstar_seq/rate_nsq,'n_sk':nstar_seq/rate_sk, 'power':power_seq})
+
+# ---- (ii) Use studentized bootstrap to get the upper bound ---- #
+dat_phat_nseq = df_nsq.assign(mdl=lambda x: np.where(x.cpt.isin(cpt_use_cov),'preds','nb')).query('y==1')
+dat_phat_nseq = dat_phat_nseq.assign(phat=lambda x: np.where(x.mdl=='preds',x.preds,x.nb))[['mdl','phat']]
+dat_phat_nseq = dat_phat_nseq.sort_values(['mdl','phat']).reset_index(None, True)
+# Calculate baseline threshold
+dat_thresh = dat_phat_nseq.groupby('mdl').phat.quantile(sens_target).reset_index().rename(columns={'phat':'thresh'})
+dat_phat_nseq_bs = dat_phat_nseq.groupby('mdl').apply(lambda x: pd.DataFrame(x.phat.sample(frac=n_bs,replace=True,random_state=n_bs).values.reshape([len(x),n_bs])))
+dat_phat_bs = dat_phat_nseq_bs.reset_index().drop(columns='level_1').groupby('mdl').quantile(sens_target).reset_index().melt('mdl',None,'bidx')
+dat_se_bs = dat_phat_bs.groupby(['mdl']).value.std(ddof=1).reset_index().rename(columns={'value':'se_bs'})
+path_thresh = os.path.join(dir_ssi,'df_student_thresh.csv')
+if os.path.exists(path_thresh):
+    df_student_thresh = pd.read_csv(path_thresh)
+else:
+    # Loop over for studentized
+    stime = time()
+    holder_se = []
+    for j in range(n_bs):
+        tmp_phat = dat_phat_nseq_bs[[j]].reset_index().rename(columns={j:'phat'})
+        tmp_phat = tmp_phat.groupby('mdl').apply(lambda x: pd.DataFrame(x.phat.sample(frac=n_bs,replace=True,random_state=j).values.reshape([len(x),n_bs])))
+        tmp_phat = tmp_phat.reset_index().drop(columns='level_1').groupby('mdl').quantile(sens_target).reset_index().melt('mdl')
+        tmp_phat = tmp_phat.groupby('mdl').value.std(ddof=1).reset_index().assign(bidx=j)
+        holder_se.append(tmp_phat)
+        if (j+1) % 10 == 0:
+            n_left, n_sec = n_bs-(j+1), time() - stime
+            rate = (j+1)/n_sec
+            print('Iteration %i of %i (ETA %i seconds)' % (j+1, n_bs, n_left / rate))
+    # Store for later
+    df_student_thresh = pd.concat(holder_se).reset_index(None,True).rename(columns={'value':'se'})
+    df_student_thresh.to_csv(path_thresh,index=False)
+    del holder_se, eta_s, thresh_s
+# To get the z-scores, you take the alpha, 1-alpha of the studentized bootstraps
+df_bs_zscore = dat_phat_bs.merge(df_student_thresh,'left',['mdl','bidx']).merge(dat_thresh,'left','mdl')
+df_bs_zscore = df_bs_zscore.assign(zscore=lambda x: (x.value-x.thresh)/x.se)
+df_bs_zscore = df_bs_zscore.groupby('mdl').zscore.quantile(1-alpha).reset_index().rename(columns={'zscore':'critv'})
+# Get the lower bound threshold
+thresh_lb = dat_thresh.merge(dat_se_bs.merge(df_bs_zscore))
+thresh_lb = thresh_lb.assign(thresh_lb=lambda x: x.thresh-x.se_bs*x.critv)[['mdl','thresh_lb']]
+
+# Calculate the precision/recall
+tmp = dat_phat_nseq.merge(thresh_lb).merge(dat_thresh).melt(['mdl','phat'],None,'tt').assign(yhat=lambda x: np.where(x.phat >= x.value,1,0))
+print(tmp.groupby(['mdl','tt']).yhat.mean().reset_index().rename(columns={'yhat':'sens'}).sort_values('tt'))
+
+# ---- (iii) REAL-TIME REJECTION ---- #
+
+dat_sk_phat = df_sk.assign(mdl=lambda x: np.where(x.cpt.isin(cpt_use_cov),'preds','nb'))
+dat_sk_phat = dat_sk_phat.assign(preds=lambda x: np.where(x.mdl=='nb',x.nb,x.preds))
+dat_sk_phat = dat_sk_phat.merge(thresh_lb).assign(yhat=lambda x: np.where(x.preds >= x.thresh_lb,1,0))
+dat_sk_phat = dat_sk_phat.assign(tp=lambda x: (x.yhat==1) & (x.y==1), fp=lambda x: (x.yhat==1) & (x.y==0), fn=lambda x: (x.yhat==0) & (x.y==1))
+# Breakdown at "model" level
+print(dat_sk_phat.groupby('mdl').apply(lambda x: pd.Series({'n':len(x),'sens':x.tp.sum()/x.y.sum(),'prec':x.tp.sum()/(x.tp.sum()+x.fp.sum())})))
+
+# Calculate real-time sensitivity + precision
+pred_rt = dat_sk_phat.groupby('date')[['y','tp','fp']].sum().reset_index()
+cn_cumsum = ['y','tp','fp']
+pred_rt[cn_cumsum] = pred_rt[cn_cumsum].apply(np.cumsum)
+pred_rt = pred_rt.loc[pred_rt.query('y>0').index.min():].reset_index(None, True)
+pred_rt = pred_rt.assign(sens=lambda x: x.tp/x.y, prec=lambda x: x.tp/(x.tp+x.fp))
+pred_rt = pred_rt.assign(se_sens=lambda x: np.sqrt(x.sens*(1-x.sens)/x.y),se_prec=lambda x: np.sqrt(x.prec*(1-x.prec)/(x.tp+x.fp)))
+pred_rt = pred_rt.assign(zscore=lambda x: (x.sens-sens_trial)/x.se_sens).query('zscore<inf').reset_index(None,True)
+pred_rt = pred_rt.assign(pval=lambda x: 1-stats.norm.cdf(x.zscore))
+# Calculat the full "n"
+holder_n = np.zeros(len(pred_rt))
+for i, date in enumerate(pred_rt.date):
+    holder_n[i] = df_sk.query('date <= @date').shape[0]
+pred_rt.insert(0,'n_rt',holder_n.astype(int))
+mdl_nsq = spl(x=df_n_power.n_nsq, y=df_n_power.power)
+mdl_sk = spl(x=df_n_power.n_sk, y=df_n_power.power)
+# Add on power
+pred_rt = pred_rt.assign(power_nsq=mdl_nsq(pred_rt.n_rt),power_sk=mdl_sk(pred_rt.n_rt))
+
+# Print how long trial would take
+idx = pred_rt.query('pval < @alpha').index
+date_reject = pred_rt.loc[idx[np.where(np.diff(idx.values) > 1)[0].max()+1]].date
+days2reject = (date_reject - df_sk.date.min()).days
+print('Trial would take %i days before rejection' % days2reject)
+
+# ---- (iv) MAKE PLOT ---- #
+
+# (a) P-value and precision
+di_pval = {'pval':'P-value (real-time)', 'power_nsq':'Power (NSQIP event rate)', 'power_sk':'Power (SK event rate)'}
+pred_rt_pval = pred_rt[['date','pval','power_nsq','power_sk']].melt('date',None,'msr')
+pred_rt_pval.msr = pd.Categorical(pred_rt_pval.msr,list(di_pval)).map(di_pval)
+
+# Plot it
+gtit = 'Black line shows rejection level (%i%%)\nVertical lines show rejection date' % (alpha*100)
+gg_trial_rt = (ggplot(pred_rt_pval,aes(x='date',y='value',color='msr')) + 
+    theme_bw() + geom_line() + labs(y='Percent') + 
+    theme(axis_title_x=element_blank(), legend_position=(0.5,-0.04), legend_direction='horizontal') + 
+    scale_color_discrete(name='Measure') + 
+    geom_hline(yintercept=alpha,linetype='--',color='black') +
+    ggtitle(gtit) + scale_y_continuous(limits=[0,0.5]) + 
+    scale_x_datetime(date_labels='%b, %y') + 
+    geom_vline(xintercept=date_reject,linetype='--',color='darkgreen'))
+gg_save('gg_trial_rt.png', dir_figures, gg_trial_rt, 5, 4)
+
+# (b) Sensitivity and precision
+di_msr = {'sens':'Sensivitiy', 'prec':'Precision'}
+pred_rt_perf = pred_rt[['date','sens','prec','se_sens','se_prec']].melt(['date','se_sens','se_prec'],None,'msr')
+pred_rt_perf = pred_rt_perf.assign(se=lambda x: np.where(x.msr=='sens',x.se_sens, x.se_prec)).drop(columns=['se_sens','se_prec'])
+pred_rt_perf = pred_rt_perf.assign(lb=lambda x: x.value-x.se*stats.norm.ppf(1-alpha))
+# Get the equivalent sensitivity/specificity from the NSQIP dataset
+tmp_nsq = df_nsq.assign(mdl=lambda x: np.where(x.cpt.isin(cpt_use_cov),'preds','nb'))
+tmp_nsq = tmp_nsq.assign(phat=lambda x: np.where(x.mdl=='preds',x.preds,x.nb))[['mdl','phat','y']].merge(thresh_lb)
+tmp_nsq = tmp_nsq.assign(yhat=lambda x: np.where(x.phat >= x.thresh_lb,1,0))
+tmp_vline = pd.DataFrame({'msr':['sens','prec'],'val':[tmp_nsq.query('y==1').yhat.mean(),tmp_nsq.query('yhat==1').y.mean()]})
+
+gtit = 'Red line shows sensitivity/precision on NSQIP'
+gg_trial_PR = (ggplot(pred_rt_perf,aes(x='date',y='value')) + 
+    theme_bw() + geom_line() + labs(y='Percent') + 
+    theme(axis_title_x=element_blank()) + 
+    facet_wrap('~msr',labeller=labeller(msr=di_msr)) +  
+    geom_hline(aes(yintercept='val'),data=tmp_vline,linetype='--',color='red') +
+    ggtitle(gtit) + scale_y_continuous(limits=[0,0.8]) + 
+    scale_x_datetime(date_labels='%b, %y') + 
+    geom_vline(xintercept=date_reject,linetype='--',color='black'))
+gg_save('gg_trial_PR.png', dir_figures, gg_trial_PR, 10, 4)
+
+
 
 ###########################
-# ----- (X) FIGURES ----- #
+# ----- (6) FIGURES ----- #
 
 # (i) Significant coefficient by SSI
 tmp = bhat_ssi.query('mdl=="logit"').assign(desc=lambda x: cat_reorder(x.desc, x.bhat))
@@ -286,13 +436,17 @@ gg_bhat_logit = (ggplot(tmp, aes(y='desc',x='bhat',color='y',alpha='is_sig.astyp
 gg_save('gg_bhat_logit.png', dir_figures, gg_bhat_logit, 5, 11)
 
 # (ii) XGBoost importance
-tmp2 = bhat_ssi.query('mdl=="xgb"').assign(desc=lambda x: cat_reorder(x.desc, x.bhat))
+tmp2 = bhat_ssi.query('mdl=="xgb"').assign(desc=lambda x: cat_reorder(x.desc, x.bhat),is_sig=lambda x: x.bhat >= fpr_xgb_fi)
 # xx = np.ceil(tmp2.bhat.abs().max()*10)/10
-gg_bhat_xgb = (ggplot(tmp2, aes(y='desc',x='np.log(bhat)',color='y')) + 
+gg_bhat_xgb = (ggplot(tmp2, aes(y='desc',x='np.log(bhat)',color='y',alpha='is_sig.astype(str)')) + 
     theme_bw() + geom_point(position=posd) + 
     theme(axis_title_y=element_blank(), legend_position=(0.7,0.20)) + 
     labs(x='log(Feature importance)') + 
-    scale_color_discrete(name='SSI',labels=['Version 1','Version 2']))
+    scale_color_discrete(name='SSI',labels=['Version 1','Version 2']) + 
+    geom_vline(xintercept=np.log(fpr_xgb_fi),linetype='--') + 
+    ggtitle('Vertical line shows 95% quantile for null features') + 
+    guides(alpha=False) +
+    scale_alpha_manual(values=[0.25,1.0]))
 gg_save('gg_bhat_xgb.png', dir_figures, gg_bhat_xgb, 5, 11)
 
 
@@ -325,3 +479,17 @@ gg_logit_xgb = (ggplot(tmp3,aes(x='value',y='xgb',color='y',alpha='is_sig.astype
         data=tmp4,inherit_aes=False))
 gg_save('gg_logit_xgb.png', dir_figures, gg_logit_xgb, 8, 4)
 
+# (iv) Are any of the significant features time sensitive?
+tmp5 = bhat_ssi.query('y=="ssi1" & is_sig').reset_index(None,True)
+tmp5 = tmp5.assign(is_time=lambda x: x.tframe.notnull(),desc=lambda x: cat_reorder(x.desc,x.bhat))
+
+colz = pd.Series(gg_color_hue(4))
+gg_time_logit = (ggplot(tmp5, aes(y='desc',x='bhat',color='is_time.astype(str)')) + 
+    theme_bw() + geom_point(position=posd) + 
+    theme(axis_title_y=element_blank()) + 
+    labs(x='Coefficient') + 
+    ggtitle('Significant coefficients for SSI label 1') + 
+    geom_vline(xintercept=0,linetype='--') + 
+    scale_x_continuous(limits=[-xx, xx]) + 
+    scale_color_manual(name='Is time sensitive?',values=colz[[1,3]]))
+gg_save('gg_time_logit.png', dir_figures, gg_time_logit, 5, 5)
