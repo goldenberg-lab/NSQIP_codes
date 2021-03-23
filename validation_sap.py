@@ -1,12 +1,4 @@
-"""
-STATISTICAL ANALYSIS PLAN FOR SSI
-i) Compare SSI @SK compared to @NSQIP
--> Raw vs Propensity score adjusted rates
--> CPT codes
-ii) How many CPTs do we have "tailored" models for? How many do we have baseline risk for? (As in how many using SK data)
-iii) What threshold do we need for a 5% PPV? Show the lower-bound (BCA). What sensitivity/PPV/FPR would we have obtained on SK?
-iv) Power analysis
-"""
+# CARRIES OUT SAP FOR SSI
 
 import os
 import dill
@@ -346,7 +338,8 @@ dat_sk_phat = dat_sk_phat.assign(preds=lambda x: np.where(x.mdl=='nb',x.nb,x.pre
 dat_sk_phat = dat_sk_phat.merge(thresh_lb).assign(yhat=lambda x: np.where(x.preds >= x.thresh_lb,1,0))
 dat_sk_phat = dat_sk_phat.assign(tp=lambda x: (x.yhat==1) & (x.y==1), fp=lambda x: (x.yhat==1) & (x.y==0), fn=lambda x: (x.yhat==0) & (x.y==1))
 # Breakdown at "model" level
-print(dat_sk_phat.groupby('mdl').apply(lambda x: pd.Series({'n':len(x),'sens':x.tp.sum()/x.y.sum(),'prec':x.tp.sum()/(x.tp.sum()+x.fp.sum())})))
+print(dat_sk_phat.groupby('mdl').apply(lambda x: 
+pd.Series({'n':len(x),'sens':x.tp.sum()/x.y.sum(),'prec':x.tp.sum()/(x.tp.sum()+x.fp.sum()),'tp':x.tp.sum()})))
 
 # Calculate real-time sensitivity + precision
 pred_rt = dat_sk_phat.groupby('date')[['y','tp','fp']].sum().reset_index()
