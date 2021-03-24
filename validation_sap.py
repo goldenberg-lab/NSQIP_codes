@@ -240,7 +240,7 @@ dat_calib = pd.concat([tmp_y, tmp_p]).reset_index(None, True)
 dat_calib = dat_calib.assign(se=lambda x: np.sqrt(x.prop*(1-x.prop)/x.tot)).drop(columns='tot')
 dat_calib = dat_calib.assign(lb=lambda x: x.prop-crit95*x.se, ub=lambda x: x.prop+crit95*x.se)
 di_ds = {'nsq':'NSQIP','sk':'SK'}
-di_mdl = {'y':'Actual', 'nb':'NaiveBayes', 'preds':'XGBoost'}
+di_mdl = {'y':'Actual', 'nb':'NaiveBayes', 'preds':'XGBoost', 'all':'All'}
 dat_calib = dat_calib.assign(ds = lambda x: x.ds.map(di_ds), mdl = lambda x: x.mdl.map(di_mdl))
 
 posd = position_dodge(0.5)
@@ -362,6 +362,13 @@ mdl_nsq = spl(x=df_n_power.n_nsq, y=df_n_power.power)
 mdl_sk = spl(x=df_n_power.n_sk, y=df_n_power.power)
 # Add on power
 pred_rt = pred_rt.assign(power_nsq=mdl_nsq(pred_rt.n_rt),power_sk=mdl_sk(pred_rt.n_rt))
+# Repeat calculations for model types
+tmp_pred = dat_sk_phat.groupby(['mdl','date'])[['y','tp','fp']].sum().reset_index()
+tmp_pred[cn_cumsum] = tmp_pred.groupby('mdl')[cn_cumsum].cumsum()
+tmp_pred = tmp_pred.assign(sens=lambda x: x.tp/x.y, prec=lambda x: x.tp/(x.tp+x.fp)).dropna()[['date','mdl','sens','prec']]
+pred_PR = pd.concat([pred_rt.assign(mdl='all')[tmp_pred.columns],tmp_pred],0)
+pred_PR = pred_PR.melt(['date','mdl'],None,'msr','val')
+pred_PR = pred_PR.assign(mdl=lambda x: x.mdl.map(di_mdl))
 
 # Print how long trial would take
 idx = pred_rt.query('pval < @alpha').index
@@ -378,6 +385,7 @@ dat_tp1 = dat_tp1.merge(X_sk[['caseid'] + cn_td])
 dat_tp1.melt('caseid',None,'cn','vv').groupby(['cn','vv']).size()
 dat_tp1.groupby(['casetype','prsepis']).size()
 dat_tp1[['caseid']].merge(X_sk[['caseid','cpt']]).assign(cpt=lambda x: 'c'+x.cpt.astype(str)).merge(di_cpt,'left','cpt').title.value_counts()
+dat_sk_phat.query('tp==1')[['caseid','mdl']].merge(X_sk[['caseid','cpt']]).assign(cpt=lambda x: 'c'+x.cpt.astype(str)).merge(di_cpt,'left','cpt').groupby(['mdl','title']).size()
 
 
 # ---- (iv) MAKE PLOT ---- #
@@ -410,17 +418,19 @@ tmp_nsq = tmp_nsq.assign(phat=lambda x: np.where(x.mdl=='preds',x.preds,x.nb))[[
 tmp_nsq = tmp_nsq.assign(yhat=lambda x: np.where(x.phat >= x.thresh_lb,1,0))
 tmp_vline = pd.DataFrame({'msr':['sens','prec'],'val':[tmp_nsq.query('y==1').yhat.mean(),tmp_nsq.query('yhat==1').y.mean()]})
 
-gtit = 'Red line shows sensitivity/precision on NSQIP'
-gg_trial_PR = (ggplot(pred_rt_perf,aes(x='date',y='value')) + 
+
+colz = ['black'] + gg_color_hue(2)
+gtit = 'Green line shows sensitivity/precision on NSQIP'
+gg_trial_PR = (ggplot(pred_PR,aes(x='date',y='val',color='mdl')) + 
     theme_bw() + geom_line() + labs(y='Percent') + 
     theme(axis_title_x=element_blank()) + 
     facet_wrap('~msr',labeller=labeller(msr=di_msr)) +  
-    geom_hline(aes(yintercept='val'),data=tmp_vline,linetype='--',color='red') +
-    ggtitle(gtit) + scale_y_continuous(limits=[0,0.8]) + 
+    geom_hline(aes(yintercept='val'),data=tmp_vline,linetype='--',color='green') +
+    ggtitle(gtit) + scale_y_continuous(limits=[0,1]) + 
     scale_x_datetime(date_labels='%b, %y') + 
-    geom_vline(xintercept=date_reject,linetype='--',color='black'))
+    scale_color_manual(name='Models',values=colz))
 gg_save('gg_trial_PR.png', dir_figures, gg_trial_PR, 10, 4)
-
+# geom_vline(xintercept=date_reject,linetype='--',color='black') + 
 
 
 ###########################

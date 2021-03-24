@@ -161,7 +161,7 @@ dat_models = dat_models.merge(best_mdl, 'inner', ['model','outcome','version'])
 holder = []
 for ii, rr in dat_models.iterrows():
     outcome, version, model, fn = rr['outcome'], rr['version'], rr['model'], rr['fn']
-    #print('outcome: %s, version: %s, model: %s' % (outcome, version, model))
+    print('outcome: %s, version: %s, model: %s' % (outcome, version, model))
     clf = load(os.path.join(dir_models,fn))
     yn = outcome+str(version)
     yval = val_Yagg[yn].values
