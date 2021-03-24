@@ -80,8 +80,8 @@ del Xtest_SK['cpt']
 
 # (vii) Get the ycount
 dat_ycount = val_Yagg.melt(['caseid','operyr'],None,'outcome','n').groupby('outcome').n.sum().reset_index()
-dat_ycount = dat_ycount.assign(version=lambda x: x.outcome.str.replace('[a-z]','').replace('','1').astype(int),
-                  outcome=lambda x: x.outcome.str.replace('[0-9]',''))
+dat_ycount = dat_ycount.assign(version=lambda x: x.outcome.str.replace('[a-z]','',regex=True).replace('','1').astype(int),
+                  outcome=lambda x: x.outcome.str.replace('[0-9]','',regex=True))
 dat_ycount = dat_ycount.merge(best_mdl,'inner',['outcome','version']).assign(outcome=lambda x: x.outcome.map(di_outcome))
 
 # (viii) Load the Precision/Recall tradeoff and thresholds
@@ -154,7 +154,8 @@ warnings.filterwarnings("ignore")
 fn_models = pd.Series(os.listdir(dir_models))
 dat_models = pd.DataFrame({'model':fn_models.str.split('\\_',1,True).iloc[:,0],
                            'outcome':fn_models.str.split('agg\\_|\\.sav',3,True).iloc[:,2]})
-dat_models = dat_models.assign(version=lambda x: x.outcome.str.replace('[a-z]','').replace('','1').astype(int),fn=fn_models, outcome=lambda x: x.outcome.str.replace('[0-9]',''))
+dat_models = dat_models[dat_models.model.isin(['xgb','logit','rf'])].reset_index(None, True)
+dat_models = dat_models.assign(version=lambda x: x.outcome.str.replace('[a-z]','',regex=True).replace('','1').astype(int),fn=fn_models, outcome=lambda x: x.outcome.str.replace('[0-9]','',regex=True))
 dat_models = dat_models.merge(best_mdl, 'inner', ['model','outcome','version'])
 
 holder = []
