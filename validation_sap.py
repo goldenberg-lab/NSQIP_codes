@@ -137,6 +137,9 @@ cpt_use_cov = df_cpt_sig.query('outcome=="ssi" & is_sig').cpt.to_list()
 cpt_use_nb = df_cpt_sig.query('outcome=="ssi" & ~is_sig').cpt.to_list()
 cpt_use_other = np.setdiff1d(df_sk.cpt.unique(),np.union1d(cpt_use_cov, cpt_use_nb))
 
+# (xii) Load in the feature values
+X_sk = pd.read_csv(os.path.join(dir_output,'dat_Xmap.csv'))
+
 # Check that CPTs overlap
 cpt_sk = pd.Series(df_sk.cpt.unique())
 cpt_nsq = pd.Series(df_nsq.cpt.unique())
@@ -365,6 +368,17 @@ idx = pred_rt.query('pval < @alpha').index
 date_reject = pred_rt.loc[idx[np.where(np.diff(idx.values) > 1)[0].max()+1]].date
 days2reject = (date_reject - df_sk.date.min()).days
 print('Trial would take %i days before rejection' % days2reject)
+
+# How many true positives involve the time-dependent: Sepsis + Case Emergent
+dat_tp1 = dat_sk_phat.query('tp==1 & mdl=="preds"')[['caseid']]
+cn_td = ['casetype_emergent','casetype_urgent','prsepis_sepsis',
+         'transfus_yes', 'cpneumon_yes', 'cpr_prior_surg_yes']
+cn_td = ['casetype','prsepis','transfus','cpneumon','cpr_prior_surg']
+dat_tp1 = dat_tp1.merge(X_sk[['caseid'] + cn_td])
+dat_tp1.melt('caseid',None,'cn','vv').groupby(['cn','vv']).size()
+dat_tp1.groupby(['casetype','prsepis']).size()
+dat_tp1[['caseid']].merge(X_sk[['caseid','cpt']]).assign(cpt=lambda x: 'c'+x.cpt.astype(str)).merge(di_cpt,'left','cpt').title.value_counts()
+
 
 # ---- (iv) MAKE PLOT ---- #
 

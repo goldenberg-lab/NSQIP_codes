@@ -69,7 +69,7 @@ df_Y = pd.read_csv(os.path.join(dir_output,'y_agg.csv'))
 best_outcome = pd.read_csv(os.path.join(dir_output, 'best_outcome.csv'))
 
 # Load the X/y label mapper for plots
-feature_mapper = pd.read_csv(os.path.join(dir_base,'feature_mapper.csv'))
+feature_mapper = pd.read_csv('feature_mapper.csv')
 di_mapper = dict(zip(feature_mapper.lvl, feature_mapper.lbl))
 
 ###############################
@@ -130,7 +130,7 @@ dat_Xmap = dat_Xmap.assign(asaclas=lambda x: np.where(x.asaclas.str.lower()=='as
                 cong_malform=lambda x: np.where(x.cong_malform == 'No','no','yes'),
                 anestech=lambda x: np.where(x.anestech=='General','general','non-general'),
                 prsepis=lambda x: np.where(x.prsepis == 'None', 'none', 'sepsis'),
-                surgspec = lambda x: x.surgspec.str.replace('Pediatric\\s','').str.lower())
+                surgspec = lambda x: x.surgspec.str.replace('Pediatric\\s','',regex=True).str.lower())
 dat_Xmap.insert(0,'caseid',df['Case Number'].values)
 
 # Booleans that need to be to str.lower()
@@ -315,8 +315,8 @@ for ay in di_agg:
     tmp_prop = tmp_prop.assign(outcome=ay,pval=pval)
     holder_Yagg.append(tmp_prop)
 dist_Yagg = pd.concat(holder_Yagg).reset_index(None,True)
-dist_Yagg = dist_Yagg.assign(version=lambda x: x.outcome.str.replace('[^0-9]','').replace('', '1').astype(int),
-                             outcome=lambda x: x.outcome.str.replace('[0-9]','').map(di_outcome))
+dist_Yagg = dist_Yagg.assign(version=lambda x: x.outcome.str.replace('[^0-9]','',regex=True).replace('', '1').astype(int),
+                             outcome=lambda x: x.outcome.str.replace('[0-9]','',regex=True).map(di_outcome))
 dist_Yagg = dist_Yagg.merge(best_outcome.assign(outcome=lambda x: x.outcome.map(di_outcome)),'inner',['outcome','version'])
 
 # (iii) Continuous X features

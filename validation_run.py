@@ -4,7 +4,8 @@ from joblib import dump, load
 import numpy as np
 import pandas as pd
 from time import time
-from support.acc_funs import fast_decomp, write_fast_decomp, gen_CI, auc2se
+from support.acc_funs import fast_decomp, write_fast_decomp
+from support.stats_funs import gen_CI, auc2se
 from support.support_funs import find_dir_nsqip, gg_save
 
 import plotnine

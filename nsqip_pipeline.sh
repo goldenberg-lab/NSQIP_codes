@@ -70,7 +70,6 @@ echo "----- analyze BEST models -----"
 python analyze_best_perf.py
 # Output: df_best.csv, best_outcome.csv, best_mdl.csv, res_ppv.csv, df_rho_outcome.csv, and 8 figures)
 
-
 echo "----- process the sickkids validation data -----"
 python validation_process.py
 # Output: val_Y.csv, val_Yagg.csv, prop_impute.csv, dat_Xmap.csv
